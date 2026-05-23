@@ -1,0 +1,162 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum AccessRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PasswordRecoveryStatus {
+  PENDING
+  RESOLVED
+  DISMISSED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+}
+
+model User {
+  id           String     @id @default(cuid())
+  name         String
+  email        String     @unique
+  sector       String
+  phone        String?    @unique
+  cpfHash      String     @unique
+  cpfCiphertext String?
+  passwordHash String
+  passwordCiphertext String?
+  role         UserRole   @default(USER)
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  sessions Session[]
+  openedTickets   Ticket[] @relation("TicketOpenedBy")
+  assignedTickets Ticket[] @relation("TicketAssignedTo")
+  resolvedTickets Ticket[] @relation("TicketResolvedBy")
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  userAgent String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model AccessRequest {
+  id            String              @id @default(cuid())
+  name          String
+  email         String
+  sector        String
+  phone         String
+  cpfHash       String
+  cpfCiphertext String
+  cpfLast4      String
+  status        AccessRequestStatus @default(PENDING)
+  acceptedTerms Boolean             @default(true)
+  approvedAt    DateTime?
+  rejectedAt    DateTime?
+  handledById   String?
+  createdUserId String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([status, createdAt])
+  @@index([email])
+  @@index([cpfHash])
+  @@index([phone])
+  @@map("access_requests")
+}
+
+model PasswordRecoveryRequest {
+  id         String                 @id @default(cuid())
+  username   String
+  email      String
+  sector     String
+  whatsapp   String
+  status     PasswordRecoveryStatus @default(PENDING)
+  resolvedAt DateTime?
+  createdAt  DateTime               @default(now())
+  updatedAt  DateTime               @updatedAt
+
+  @@index([status, createdAt])
+  @@index([email])
+  @@map("password_recovery_requests")
+}
+
+model Ticket {
+  id           String       @id @default(cuid())
+  title        String
+  description  String?
+  sector       String
+  status       TicketStatus @default(OPEN)
+  openedById   String
+  assignedToId String?
+  resolvedById String?
+  assignedAt   DateTime?
+  resolvedAt   DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  openedBy   User  @relation("TicketOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
+  assignedTo User? @relation("TicketAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  resolvedBy User? @relation("TicketResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([openedById, createdAt])
+  @@index([sector, status, createdAt])
+  @@index([assignedToId, status, assignedAt])
+  @@index([resolvedById, resolvedAt])
+  @@map("tickets")
+}
+
+model AppStateDocument {
+  key       String   @id
+  data      Json     @default("{}")
+  revision  BigInt   @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_state_documents")
+}
+
+model RealtimeEvent {
+  id        BigInt   @id @default(autoincrement())
+  clientId  String?  @map("client_id")
+  source    String   @default("system")
+  payload   Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt], map: "realtime_events_created_at_idx")
+  @@map("realtime_events")
+}
