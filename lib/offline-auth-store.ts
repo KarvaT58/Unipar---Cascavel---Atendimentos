@@ -5,9 +5,16 @@ import path from "node:path"
 import type { NextRequest } from "next/server"
 
 import {
+  canUseOfflineFallback,
+  isLocalDataOnlyEnabled,
+  readBooleanEnv,
+  shouldSeedLocalAdminUser,
+} from "@/lib/local-mode"
+import {
   createRandomToken,
   decryptString,
   encryptString,
+  hashSensitiveValue,
   hashToken,
 } from "@/lib/security"
 
@@ -169,10 +176,64 @@ const sessionMaxAgeSeconds = 60 * 60 * 24 * 7
 let updateChain: Promise<void> = Promise.resolve()
 
 export function isOfflineFallbackEnabled() {
+  if (!canUseOfflineFallback()) {
+    return false
+  }
+
   return (
-    process.env.AUTH_OFFLINE_FALLBACK === "true" ||
+    isLocalDataOnlyEnabled() ||
+    readBooleanEnv(process.env.AUTH_OFFLINE_FALLBACK) ||
     process.env.NODE_ENV === "development"
   )
+}
+
+export async function ensureDefaultOfflineAdminUser() {
+  if (!isOfflineFallbackEnabled() || !shouldSeedLocalAdminUser()) {
+    return null
+  }
+
+  const config = getDefaultOfflineAdminConfig()
+
+  return updateOfflineStore(async (store) => {
+    const now = new Date().toISOString()
+    const existingUser = store.users.find(
+      (user) =>
+        user.id === "offline_user_local_admin" ||
+        user.email.toLowerCase() === config.email
+    )
+
+    if (existingUser) {
+      existingUser.name = existingUser.name || config.name
+      existingUser.email = config.email
+      existingUser.sector = existingUser.sector || config.sector
+      existingUser.phone = existingUser.phone || config.phone
+      existingUser.role = "ADMIN"
+      existingUser.status = "ACTIVE"
+      existingUser.updatedAt = now
+
+      return toUserRow(existingUser)
+    }
+
+    const user: OfflineUser = {
+      id: "offline_user_local_admin",
+      name: config.name,
+      email: config.email,
+      sector: config.sector,
+      phone: config.phone,
+      cpfHash: hashSensitiveValue(config.cpf),
+      cpfCiphertext: encryptString(config.cpf),
+      passwordHash: await bcrypt.hash(config.password, 12),
+      passwordCiphertext: encryptString(config.password),
+      role: "ADMIN",
+      status: "ACTIVE",
+      createdAt: now,
+      updatedAt: now,
+    }
+
+    store.users.push(user)
+
+    return toUserRow(user)
+  })
 }
 
 export async function createOfflineAccessRequest(
@@ -284,6 +345,8 @@ export async function listOfflineUsers(): Promise<OfflineUserRow[]> {
   if (!isOfflineFallbackEnabled()) {
     return []
   }
+
+  await ensureDefaultOfflineAdminUser().catch(logOfflineAdminSeedError)
 
   const store = await readOfflineStore()
 
@@ -561,6 +624,8 @@ export async function findOfflineUserByEmail(email: string) {
     return null
   }
 
+  await ensureDefaultOfflineAdminUser().catch(logOfflineAdminSeedError)
+
   const store = await readOfflineStore()
   const user = store.users.find(
     (storeUser) =>
@@ -603,6 +668,8 @@ export async function getOfflineSessionUser(token?: string) {
   if (!token || !isOfflineFallbackEnabled()) {
     return null
   }
+
+  await ensureDefaultOfflineAdminUser().catch(logOfflineAdminSeedError)
 
   const tokenHash = hashToken(token)
   const now = new Date()
@@ -702,6 +769,45 @@ function createEmptyStore(): OfflineStore {
   }
 }
 
+function getDefaultOfflineAdminConfig() {
+  const email =
+    process.env.LOCAL_AUTH_USER_EMAIL?.trim().toLowerCase() ||
+    "dev@unipar.br"
+  const password = process.env.LOCAL_AUTH_USER_PASSWORD || "12345678"
+  const name = process.env.LOCAL_AUTH_USER_NAME?.trim() || "Dev Local"
+  const sector =
+    process.env.LOCAL_AUTH_USER_SECTOR?.trim().toLowerCase() || "ti"
+  const phone = normalizeOptionalDigits(
+    process.env.LOCAL_AUTH_USER_PHONE ?? "45999999999"
+  )
+  const cpf = normalizeLocalCpf(process.env.LOCAL_AUTH_USER_CPF)
+
+  return {
+    name,
+    email,
+    password,
+    sector,
+    phone,
+    cpf,
+  }
+}
+
+function normalizeOptionalDigits(value: string) {
+  const digits = onlyDigits(value)
+
+  return digits || null
+}
+
+function normalizeLocalCpf(value: string | undefined) {
+  const digits = onlyDigits(value ?? "")
+
+  return digits.length === 11 ? digits : "00000000000"
+}
+
+function onlyDigits(value: string) {
+  return value.replace(/\D/g, "")
+}
+
 function toUserRow(user: OfflineUser): OfflineUserRow {
   return {
     id: user.id,
@@ -738,6 +844,10 @@ function assertOfflineFallbackEnabled() {
   if (!isOfflineFallbackEnabled()) {
     throw new Error("Modo local de teste não está habilitado.")
   }
+}
+
+function logOfflineAdminSeedError(error: unknown) {
+  console.warn("Nao foi possivel criar o usuario local inicial.", error)
 }
 
 function offlineDisabledResult(): OfflineWriteResult {

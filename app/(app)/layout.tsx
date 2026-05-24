@@ -1,4 +1,5 @@
 import * as React from "react"
+import { redirect } from "next/navigation"
 
 import { AppHeader } from "@/components/app-header"
 import { AppSidebar } from "@/components/app-sidebar"
@@ -38,6 +39,11 @@ export default async function AppLayout({
   children: React.ReactNode
 }) {
   const currentUser = await getSessionUser().catch(() => null)
+
+  if (!currentUser) {
+    redirect("/login")
+  }
+
   const currentSector = getSectorLabel(currentUser?.sector)
 
   return (

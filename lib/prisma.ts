@@ -1,6 +1,7 @@
 import { PrismaPg } from "@prisma/adapter-pg"
 
 import { PrismaClient } from "@/lib/generated/prisma/client"
+import { isLocalDataOnlyEnabled } from "@/lib/local-mode"
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient
@@ -57,7 +58,6 @@ export function isDatabaseConnectionError(error: unknown) {
 }
 
 function createUnavailablePrismaClient(message: string) {
-  const error = new DatabaseUnavailableError(message)
   const unavailableClient: unknown = new Proxy(function unavailablePrismaCall() {}, {
     get(_target, property) {
       if (property === "then") {
@@ -67,7 +67,11 @@ function createUnavailablePrismaClient(message: string) {
       return unavailableClient
     },
     apply() {
-      return Promise.reject(error)
+      const rejection = Promise.reject(new DatabaseUnavailableError(message))
+
+      rejection.catch(() => undefined)
+
+      return rejection
     },
   })
 
@@ -75,6 +79,12 @@ function createUnavailablePrismaClient(message: string) {
 }
 
 function createPrismaClient() {
+  if (isLocalDataOnlyEnabled()) {
+    return createUnavailablePrismaClient(
+      "LOCAL_DATA_ONLY ativo. Usando dados locais em .local-data."
+    )
+  }
+
   const connectionString = process.env.DATABASE_URL?.trim()
 
   if (!connectionString) {

@@ -18,6 +18,7 @@ export interface UserProfilePayload {
   about?: string;
   chatStatus?: UserChatStatus;
   workStatus?: UserWorkStatus;
+  lastSeenAt?: Date;
   clientId?: string;
 }
 

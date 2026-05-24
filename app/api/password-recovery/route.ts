@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { canUseOfflineFallback } from "@/lib/local-mode"
 import { createOfflinePasswordRecoveryRequest } from "@/lib/offline-auth-store"
 import { prisma } from "@/lib/prisma"
 import {
@@ -47,6 +48,13 @@ export async function POST(request: Request) {
       },
     })
   } catch {
+    if (!canUseOfflineFallback()) {
+      return NextResponse.json(
+        { message: "Banco de dados indisponivel no momento." },
+        { status: 503 }
+      )
+    }
+
     const offlineResult = await createOfflinePasswordRecoveryRequest({
       username,
       email,

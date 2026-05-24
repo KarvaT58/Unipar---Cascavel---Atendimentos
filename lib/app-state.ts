@@ -110,6 +110,7 @@ const DATE_FIELD_NAMES = new Set([
   "resolvedAt",
   "scheduledAt",
   "completedAt",
+  "lastSeenAt",
 ]);
 
 function isIsoLikeDate(value: unknown): value is string {
@@ -159,9 +160,16 @@ const MESSAGE_STATUS_PRIORITY: Record<Message["status"], number> = {
   delivered: 1,
   read: 2,
 };
+const TYPING_INDICATOR_MERGE_TTL_MS = 3000;
 
 function mergeStringLists(first?: string[], second?: string[]) {
   return Array.from(new Set([...(first ?? []), ...(second ?? [])]));
+}
+
+function mergeOptionalStringLists(first?: string[], second?: string[]) {
+  if (!first && !second) return undefined;
+
+  return mergeStringLists(first, second);
 }
 
 function getMessageStatusWithHighestPriority(
@@ -195,6 +203,14 @@ function mergeMessage(storedMessage: Message, incomingMessage: Message) {
     hiddenForUserIds: mergeStringLists(
       storedMessage.hiddenForUserIds,
       incomingMessage.hiddenForUserIds,
+    ),
+    pinnedForUserIds: mergeOptionalStringLists(
+      storedMessage.pinnedForUserIds,
+      incomingMessage.pinnedForUserIds,
+    ),
+    favoriteForUserIds: mergeOptionalStringLists(
+      storedMessage.favoriteForUserIds,
+      incomingMessage.favoriteForUserIds,
     ),
   };
 }
@@ -297,6 +313,37 @@ function mergeAppPageRecordCollections(
   });
 
   return nextRecordsByPage;
+}
+
+function mergeTypingIndicators(
+  storedIndicators: Record<string, TypingIndicatorState>,
+  incomingIndicators: Record<string, TypingIndicatorState>,
+) {
+  const now = Date.now();
+  const indicatorsByKey = new Map<string, TypingIndicatorState>();
+
+  [
+    ...Object.entries(storedIndicators),
+    ...Object.entries(incomingIndicators),
+  ].forEach(([indicatorKey, indicator]) => {
+    if (
+      now - new Date(indicator.updatedAt).getTime() >=
+      TYPING_INDICATOR_MERGE_TTL_MS
+    ) {
+      return;
+    }
+
+    const storedIndicator = indicatorsByKey.get(indicatorKey);
+
+    if (
+      !storedIndicator ||
+      indicator.updatedAt.getTime() > storedIndicator.updatedAt.getTime()
+    ) {
+      indicatorsByKey.set(indicatorKey, indicator);
+    }
+  });
+
+  return Object.fromEntries(indicatorsByKey);
 }
 
 function mergeServiceTicketAttachmentLists(
@@ -463,6 +510,10 @@ export function mergeAppStates(
     serviceTickets: mergeServiceTickets(
       storedState.serviceTickets,
       incomingState.serviceTickets,
+    ),
+    typingIndicators: mergeTypingIndicators(
+      storedState.typingIndicators,
+      incomingState.typingIndicators,
     ),
     pageRecords: mergeAppPageRecordCollections(
       storedState.pageRecords,

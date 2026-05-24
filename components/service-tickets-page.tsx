@@ -89,6 +89,8 @@ import {
   getServiceTicketNotificationSnapshot,
   markServiceTicketNotificationKeysRead,
   readServiceTicketNotificationReadKeys,
+  readServiceTicketNotificationSoundKeys,
+  writeServiceTicketNotificationSoundKeys,
 } from "@/lib/service-ticket-notifications";
 import {
   getUploadSizeLimitMessage,
@@ -120,6 +122,7 @@ const TICKETS_DESKTOP_HEADER_HEIGHT = 35;
 const TICKETS_MOBILE_CARD_HEIGHT = 176;
 const CHAT_TEXTAREA_MAX_ROWS = 5;
 const CLOSE_DESCRIPTION_MAX_ROWS = 10;
+const SERVICE_TICKET_NOTIFICATION_SOUND_SRC = "/audio/notificacao.mp3";
 
 const ticketFilterOptions: Array<{ value: TicketListFilter; label: string }> = [
   { value: "all", label: "Ver tudo" },
@@ -563,6 +566,9 @@ export function ServiceTicketsPage({
   const desktopTicketRowRef = useRef<HTMLElement | null>(null);
   const mobileTicketCardRef = useRef<HTMLElement | null>(null);
   const messageElementRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
+  const pendingNotificationSoundRef = useRef(false);
+  const ticketNotificationSoundStartedAtRef = useRef(new Date());
   const closeFileInputRef = useRef<HTMLInputElement>(null);
   const closeDescriptionTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [activeFilter, setActiveFilter] = useState<TicketListFilter>("all");
@@ -619,6 +625,51 @@ export function ServiceTicketsPage({
     };
   }, []);
 
+  useEffect(() => {
+    notificationAudioRef.current = new Audio(
+      SERVICE_TICKET_NOTIFICATION_SOUND_SRC,
+    );
+    notificationAudioRef.current.preload = "auto";
+
+    return () => {
+      notificationAudioRef.current = null;
+    };
+  }, []);
+
+  const playTicketNotificationSound = useCallback(() => {
+    const audio = notificationAudioRef.current;
+
+    if (!audio) {
+      pendingNotificationSoundRef.current = true;
+      return;
+    }
+
+    audio.currentTime = 0;
+    void audio.play().catch(() => {
+      pendingNotificationSoundRef.current = true;
+    });
+  }, []);
+
+  const flushPendingTicketNotificationSound = useCallback(() => {
+    if (!pendingNotificationSoundRef.current) return;
+
+    pendingNotificationSoundRef.current = false;
+    playTicketNotificationSound();
+  }, [playTicketNotificationSound]);
+
+  useEffect(() => {
+    window.addEventListener("pointerdown", flushPendingTicketNotificationSound);
+    window.addEventListener("keydown", flushPendingTicketNotificationSound);
+
+    return () => {
+      window.removeEventListener(
+        "pointerdown",
+        flushPendingTicketNotificationSound,
+      );
+      window.removeEventListener("keydown", flushPendingTicketNotificationSound);
+    };
+  }, [flushPendingTicketNotificationSound]);
+
   const selectedTicketCandidate = selectedTicketId
     ? tickets.find((ticket) => ticket.id === selectedTicketId) ?? null
     : null;
@@ -671,6 +722,46 @@ export function ServiceTicketsPage({
 
     return getServiceTicketNotificationSnapshot(tickets, currentUser, readKeys);
   }, [currentUser, notificationReadVersion, tickets]);
+
+  useEffect(() => {
+    ticketNotificationSoundStartedAtRef.current = new Date();
+  }, [currentUser.id]);
+
+  useEffect(() => {
+    if (!selectedTicket || !currentUser.id) return;
+
+    const notificationSnapshot = getServiceTicketNotificationSnapshot(
+      [selectedTicket],
+      currentUser,
+      new Set<string>(),
+    );
+    const soundKeys = readServiceTicketNotificationSoundKeys(currentUser.id);
+    const newSoundKeys = selectedTicket.messages
+      .filter(
+        (message) =>
+          message.createdAt.getTime() >
+          ticketNotificationSoundStartedAtRef.current.getTime(),
+      )
+      .map((message) =>
+        getServiceTicketNotificationKey(selectedTicket, message),
+      )
+      .filter(
+        (notificationKey) =>
+          notificationSnapshot.allKeys.has(notificationKey) &&
+          !soundKeys.has(notificationKey),
+      );
+
+    if (newSoundKeys.length === 0) return;
+
+    const nextSoundKeys = new Set(soundKeys);
+
+    newSoundKeys.forEach((notificationKey) =>
+      nextSoundKeys.add(notificationKey),
+    );
+    writeServiceTicketNotificationSoundKeys(currentUser.id, nextSoundKeys);
+    playTicketNotificationSound();
+  }, [currentUser, playTicketNotificationSound, selectedTicket]);
+
   const markNotificationKeysAsSeen = useCallback(
     (keys: string[]) => {
       const didChange = markServiceTicketNotificationKeysRead(

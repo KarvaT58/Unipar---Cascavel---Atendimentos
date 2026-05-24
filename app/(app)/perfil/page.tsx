@@ -1,10 +1,5 @@
-import { AppPageContent } from "@/components/app-page-content"
+import { ProfilePage } from "@/components/profile-page"
 
 export default function PerfilPage() {
-  return (
-    <AppPageContent
-      title="Perfil"
-      description="Página em desenvolvimento."
-    />
-  )
+  return <ProfilePage />
 }

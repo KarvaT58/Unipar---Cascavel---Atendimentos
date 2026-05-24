@@ -154,7 +154,11 @@ function ComboboxList({
       if (nextScrollTop === list.scrollTop) return
 
       list.scrollTop = nextScrollTop
-      event.preventDefault()
+
+      if (event.cancelable) {
+        event.preventDefault()
+      }
+
       event.stopPropagation()
     },
     [onWheelCapture]

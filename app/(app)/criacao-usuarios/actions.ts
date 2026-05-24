@@ -12,6 +12,7 @@ import {
   saveOfflineUser,
   setOfflineUserBlocked,
 } from "@/lib/offline-auth-store"
+import { canUseOfflineFallback } from "@/lib/local-mode"
 import { prisma } from "@/lib/prisma"
 import {
   decryptString,
@@ -124,6 +125,13 @@ export async function getAccessRequestDetails(
       },
     }
   } catch {
+    if (!canUseOfflineFallback()) {
+      return {
+        ok: false,
+        message: "Banco de dados indisponivel no momento.",
+      }
+    }
+
     const offlineRequest = await getOfflineAccessRequestDetails(requestId).catch(
       () => null
     )
@@ -184,6 +192,13 @@ export async function getUserDetails(
       },
     }
   } catch {
+    if (!canUseOfflineFallback()) {
+      return {
+        ok: false,
+        message: "Banco de dados indisponivel no momento.",
+      }
+    }
+
     const offlineUser = await getOfflineUserDetails(userId).catch(() => null)
 
     if (!offlineUser) {
@@ -323,6 +338,13 @@ export async function saveUser(
       }
     }
 
+    if (!canUseOfflineFallback()) {
+      return {
+        ok: false,
+        message: "Banco de dados indisponivel no momento.",
+      }
+    }
+
     try {
       const offlineUser = await saveOfflineUser({
         id: input.id,
@@ -382,6 +404,13 @@ export async function rejectAccessRequest(
     .catch(() => null)
 
   if (!result) {
+    if (!canUseOfflineFallback()) {
+      return {
+        ok: false,
+        message: "Banco de dados indisponivel no momento.",
+      }
+    }
+
     return rejectOfflineAccessRequest(requestId, admin.userId)
       .then(() => {
         revalidatePath("/criacao-usuarios")
@@ -454,6 +483,13 @@ export async function setUserBlocked(
       user: toUserPayload(user),
     }
   } catch (error) {
+    if (!canUseOfflineFallback()) {
+      return {
+        ok: false,
+        message: "Banco de dados indisponivel no momento.",
+      }
+    }
+
     try {
       const offlineUser = await setOfflineUserBlocked(userId, blocked)
 
@@ -501,6 +537,13 @@ export async function deleteUser(userId: string): Promise<ActionResult> {
 
     return { ok: true, message: "Usuário apagado." }
   } catch (error) {
+    if (!canUseOfflineFallback()) {
+      return {
+        ok: false,
+        message: "Banco de dados indisponivel no momento.",
+      }
+    }
+
     try {
       await deleteOfflineUser(userId)
 

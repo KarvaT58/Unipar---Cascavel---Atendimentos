@@ -11,6 +11,10 @@ import {
   type AdminUser,
   type Sector,
 } from "@/lib/admin-data"
+import {
+  canUseOfflineFallback,
+  isLocalDataOnlyEnabled,
+} from "@/lib/local-mode"
 import { listOfflineUsers } from "@/lib/offline-auth-store"
 import { isDatabaseConnectionError, prisma } from "@/lib/prisma"
 import {
@@ -83,6 +87,10 @@ export async function readAppState(): Promise<AppStateEnvelope> {
       databaseConnected: true,
     }
   } catch (error) {
+    if (!canUseOfflineFallback()) {
+      throw error
+    }
+
     handleDatabaseFallback(error)
 
     return withHydratedAuthUsers(await readOfflineAppState())
@@ -152,6 +160,10 @@ export async function saveAppState(
       databaseConnected: true,
     }
   } catch (error) {
+    if (!canUseOfflineFallback()) {
+      throw error
+    }
+
     handleDatabaseFallback(error)
 
     return saveOfflineAppState(state, clientId, source)
@@ -186,6 +198,10 @@ export async function readRealtimeEvents(afterId: number) {
       createdAt: event.createdAt.toISOString(),
     }))
   } catch (error) {
+    if (!canUseOfflineFallback()) {
+      throw error
+    }
+
     handleDatabaseFallback(error)
 
     return readOfflineRealtimeEvents(afterId).catch(() => [])
@@ -205,6 +221,10 @@ export async function readLatestRealtimeEventId() {
 
     return Number(latestEvent?.id ?? 0)
   } catch (error) {
+    if (!canUseOfflineFallback()) {
+      throw error
+    }
+
     handleDatabaseFallback(error)
 
     return readLatestOfflineRealtimeEventId().catch(() => 0)
@@ -212,7 +232,10 @@ export async function readLatestRealtimeEventId() {
 }
 
 function shouldUseOfflineFallback() {
-  return Date.now() < databaseFallbackUntil
+  return (
+    isLocalDataOnlyEnabled() ||
+    (canUseOfflineFallback() && Date.now() < databaseFallbackUntil)
+  )
 }
 
 async function withHydratedAuthUsers(envelope: AppStateEnvelope) {
@@ -256,6 +279,10 @@ async function readAuthUsers(): Promise<AuthUserRow[]> {
       },
     })
   } catch (error) {
+    if (!canUseOfflineFallback()) {
+      throw error
+    }
+
     handleDatabaseFallback(error)
 
     return listOfflineUsers()

@@ -10,6 +10,7 @@ import {
   UserIcon,
 } from "lucide-react"
 
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
   OptionCombobox,
@@ -35,6 +36,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  getUserChatStatusLabel,
+  getUserWorkStatusLabel,
+  type UserChatStatus,
+  type UserWorkStatus,
+} from "@/lib/admin-data"
+import { formatLastSeenAt, getChatPresenceMeta } from "@/lib/chat-data"
 import { cn } from "@/lib/utils"
 
 export type TeamUser = {
@@ -45,6 +53,11 @@ export type TeamUser = {
   role: "USER" | "ADMIN"
   sector: string
   sectorLabel: string
+  avatar?: string
+  about?: string
+  chatStatus?: UserChatStatus
+  workStatus?: UserWorkStatus
+  lastSeenAt?: Date
 }
 
 type TeamDirectoryProps = {
@@ -141,11 +154,13 @@ export function TeamDirectory({ users }: TeamDirectoryProps) {
 
         <CardContent className="min-h-0 flex-1 overflow-auto p-0">
           {filteredUsers.length ? (
-            <div className="min-w-[980px]">
-              <div className="grid grid-cols-[1.1fr_0.7fr_1.35fr_0.7fr_1fr_42px] gap-3 border-b bg-muted/30 px-3 py-2 text-xs font-semibold uppercase text-muted-foreground">
-                <span>Nome</span>
+            <div className="min-w-[1180px]">
+              <div className="grid grid-cols-[1.15fr_0.7fr_1.2fr_0.68fr_0.75fr_0.55fr_0.9fr_42px] gap-3 border-b bg-muted/30 px-3 py-2 text-xs font-semibold uppercase text-muted-foreground">
+                <span>Usuario</span>
                 <span>Telefone</span>
                 <span>E-mail</span>
+                <span>Presenca</span>
+                <span>Status</span>
                 <span>Perfil</span>
                 <span>Setor</span>
                 <span />
@@ -173,11 +188,50 @@ export function TeamDirectory({ users }: TeamDirectoryProps) {
 }
 
 function TeamUserRow({ user }: { user: TeamUser }) {
+  const presence = getChatPresenceMeta({
+    chatStatus: user.chatStatus,
+    isOnline: user.chatStatus === "online",
+  })
+  const offlineHint =
+    user.chatStatus === "offline" ? formatLastSeenAt(user.lastSeenAt) : null
+
   return (
-    <div className="grid grid-cols-[1.1fr_0.7fr_1.35fr_0.7fr_1fr_42px] items-center gap-3 border-b px-3 py-3 text-sm last:border-b-0">
-      <span className="break-words font-medium leading-snug">{user.name}</span>
+    <div className="grid grid-cols-[1.15fr_0.7fr_1.2fr_0.68fr_0.75fr_0.55fr_0.9fr_42px] items-center gap-3 border-b px-3 py-3 text-sm last:border-b-0">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="relative shrink-0">
+          <Avatar className="size-10">
+            {user.avatar ? (
+              <AvatarImage src={user.avatar} alt={user.name} />
+            ) : null}
+            <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
+          </Avatar>
+          <span
+            className={cn(
+              "absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-background",
+              presence.dotClassName
+            )}
+          />
+        </div>
+        <div className="min-w-0">
+          <p className="truncate font-medium leading-snug">{user.name}</p>
+          {user.about ? (
+            <p className="truncate text-xs text-muted-foreground">
+              {user.about}
+            </p>
+          ) : null}
+        </div>
+      </div>
       <span className="text-muted-foreground">{user.phone || "-"}</span>
       <span className="break-all leading-snug">{user.email}</span>
+      <div className="min-w-0">
+        <PresencePill status={user.chatStatus} />
+        {offlineHint ? (
+          <p className="mt-1 truncate text-[11px] text-muted-foreground">
+            {offlineHint}
+          </p>
+        ) : null}
+      </div>
+      <WorkStatusPill status={user.workStatus} />
       <div className="flex min-w-0">
         <RolePill role={user.role} />
       </div>
@@ -208,6 +262,28 @@ function TeamUserRow({ user }: { user: TeamUser }) {
   )
 }
 
+function PresencePill({ status }: { status?: UserChatStatus }) {
+  const presence = getChatPresenceMeta({
+    chatStatus: status,
+    isOnline: status === "online",
+  })
+
+  return (
+    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground">
+      <span className={cn("size-1.5 rounded-full", presence.dotClassName)} />
+      <span className="truncate">{getUserChatStatusLabel(status)}</span>
+    </span>
+  )
+}
+
+function WorkStatusPill({ status }: { status?: UserWorkStatus }) {
+  return (
+    <span className="inline-flex max-w-full items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+      <span className="truncate">{getUserWorkStatusLabel(status)}</span>
+    </span>
+  )
+}
+
 function RolePill({ role }: { role: TeamUser["role"] }) {
   const admin = role === "ADMIN"
 
@@ -224,4 +300,16 @@ function RolePill({ role }: { role: TeamUser["role"] }) {
       {admin ? "Admin" : "Usuário"}
     </span>
   )
+}
+
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+
+  if (!parts.length) return "U"
+
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase()
 }

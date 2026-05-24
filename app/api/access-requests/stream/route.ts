@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { canUseOfflineFallback } from "@/lib/local-mode"
 import { listPendingOfflineAccessRequests } from "@/lib/offline-auth-store"
 import { prisma } from "@/lib/prisma"
 import { getSectorLabel } from "@/lib/sectors"
@@ -96,7 +97,13 @@ async function getPendingRequestRows() {
       where: { status: "PENDING" },
       orderBy: { createdAt: "desc" },
     })
-    .catch(() => listPendingOfflineAccessRequests())
+    .catch((error) => {
+      if (!canUseOfflineFallback()) {
+        throw error
+      }
+
+      return listPendingOfflineAccessRequests()
+    })
 
   return requests.map((request) => {
     const sector = getSectorLabel(request.sector)

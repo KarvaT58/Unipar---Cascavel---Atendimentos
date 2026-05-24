@@ -2,6 +2,7 @@ import {
   readLatestRealtimeEventId,
   readRealtimeEvents,
 } from "@/lib/server/state-store"
+import { getSessionUser } from "@/lib/session"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -18,6 +19,15 @@ function delay(ms: number) {
 }
 
 export async function GET(request: Request) {
+  const currentUser = await getSessionUser().catch(() => null)
+
+  if (!currentUser) {
+    return Response.json(
+      { message: "Sessao expirada. Faca login novamente." },
+      { status: 401 }
+    )
+  }
+
   const { searchParams } = new URL(request.url)
   const initialLastEventId = searchParams.get("lastEventId")
   let lastEventId =

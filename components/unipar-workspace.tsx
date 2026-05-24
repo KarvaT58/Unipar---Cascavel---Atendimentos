@@ -134,6 +134,7 @@ type AuthenticatedUser = {
   about?: string;
   chatStatus?: UserChatStatus;
   workStatus?: UserWorkStatus;
+  lastSeenAt?: Date;
 };
 type ProfileUpdate = Partial<
   Pick<AuthenticatedUser, "avatar" | "about" | "chatStatus" | "workStatus">
@@ -168,6 +169,8 @@ const KANBAN_DUE_REMINDER_UNLOCK_SECONDS = 5;
 const LOAN_REMINDER_UNLOCK_SECONDS = 5;
 const ALERT_PREVIEW_MAX_LENGTH = 30;
 const TYPING_INDICATOR_TTL_MS = 3000;
+const PRESENCE_HEARTBEAT_MS = 15000;
+const PRESENCE_ONLINE_WINDOW_MS = 45000;
 const DIRECT_CONVERSATION_PREFIX = "dm:";
 const NOTIFICATION_SOUND_SRC = "/audio/notificacao.mp3";
 const NOTIFICATION_SOUND_STORAGE_LIMIT = 300;
@@ -189,6 +192,13 @@ function getNavFromPathname(pathname: string | null) {
 
 function getPathFromNav(item: string) {
   return isAppNavId(item) ? NAV_PATHS[item] : NAV_PATHS.chat;
+}
+
+function hasRecentPresence(lastSeenAt?: Date) {
+  return Boolean(
+    lastSeenAt &&
+      Date.now() - lastSeenAt.getTime() <= PRESENCE_ONLINE_WINDOW_MS,
+  );
 }
 
 function getDateKey(date: Date) {
@@ -978,6 +988,7 @@ export function UniparWorkspace({
         isOnline: chatStatus === "online",
         chatStatus,
         workStatus: currentSessionUser.workStatus ?? "available",
+        lastSeenAt: currentSessionUser.lastSeenAt ?? new Date(),
       };
     }
 
@@ -990,6 +1001,7 @@ export function UniparWorkspace({
       isOnline: false,
       chatStatus: "offline",
       workStatus: "available",
+      lastSeenAt: undefined,
     };
   }, [currentSessionUser]);
   const [announcementEvents, setAnnouncementEvents] = useState<
@@ -1081,9 +1093,15 @@ export function UniparWorkspace({
         const normalizedEmail = user.email.toLowerCase();
         const isCurrentUser =
           normalizedEmail === currentAnnouncementUser.email.toLowerCase();
-        const chatStatus = isCurrentUser
-          ? getChatPresenceStatus(currentAnnouncementUser)
-          : (user.chatStatus ?? "offline");
+        const lastSeenAt = isCurrentUser
+          ? (currentAnnouncementUser.lastSeenAt ?? new Date())
+          : user.lastSeenAt;
+        const hasLiveSession = isCurrentUser || hasRecentPresence(lastSeenAt);
+        const chatStatus = hasLiveSession
+          ? isCurrentUser
+            ? getChatPresenceStatus(currentAnnouncementUser)
+            : (user.chatStatus ?? "online")
+          : "offline";
 
         usersByEmail.set(normalizedEmail, {
           id: user.id,
@@ -1103,6 +1121,7 @@ export function UniparWorkspace({
           workStatus: isCurrentUser
             ? currentAnnouncementUser.workStatus
             : user.workStatus,
+          lastSeenAt,
         });
       });
 
@@ -1334,6 +1353,7 @@ export function UniparWorkspace({
         about: stateUser.about ?? currentUser.about,
         chatStatus: stateUser.chatStatus ?? currentUser.chatStatus,
         workStatus: stateUser.workStatus ?? currentUser.workStatus,
+        lastSeenAt: stateUser.lastSeenAt ?? currentUser.lastSeenAt,
       };
 
       if (
@@ -1344,7 +1364,8 @@ export function UniparWorkspace({
         nextUser.avatar === currentUser.avatar &&
         nextUser.about === currentUser.about &&
         nextUser.chatStatus === currentUser.chatStatus &&
-        nextUser.workStatus === currentUser.workStatus
+        nextUser.workStatus === currentUser.workStatus &&
+        nextUser.lastSeenAt?.getTime() === currentUser.lastSeenAt?.getTime()
       ) {
         return currentUser;
       }
@@ -1457,6 +1478,7 @@ export function UniparWorkspace({
         setCurrentSessionUser({
           ...user,
           avatar: user.avatar ?? "",
+          lastSeenAt: user.lastSeenAt ?? new Date(),
         });
         setIsAuthenticated(true);
       })
@@ -1471,6 +1493,90 @@ export function UniparWorkspace({
       cancelled = true;
     };
   }, []);
+
+  const touchCurrentUserPresence = useCallback(() => {
+    if (!currentSessionUser) return;
+
+    const seenAt = new Date();
+    const chatStatus = currentSessionUser.chatStatus ?? "online";
+
+    setAdminUsers((currentUsers) => {
+      let foundUser = false;
+      const updatedUsers = currentUsers.map((user) => {
+        const sameUser =
+          user.id === currentSessionUser.id ||
+          user.email.toLowerCase() === currentSessionUser.email.toLowerCase();
+
+        if (!sameUser) return user;
+
+        foundUser = true;
+
+        return {
+          ...user,
+          name: currentSessionUser.name,
+          email: currentSessionUser.email,
+          sector: currentSessionUser.sector,
+          isAdmin: user.isAdmin || currentSessionUser.isAdmin,
+          avatar: currentSessionUser.avatar,
+          about: currentSessionUser.about,
+          chatStatus,
+          workStatus: currentSessionUser.workStatus ?? user.workStatus,
+          lastSeenAt: seenAt,
+        };
+      });
+
+      if (foundUser) return updatedUsers;
+
+      return [
+        {
+          id: currentSessionUser.id,
+          name: currentSessionUser.name,
+          email: currentSessionUser.email,
+          sector: currentSessionUser.sector,
+          password: "",
+          isAdmin: currentSessionUser.isAdmin,
+          status: "active",
+          createdAt: seenAt,
+          avatar: currentSessionUser.avatar,
+          about: currentSessionUser.about,
+          chatStatus,
+          workStatus: currentSessionUser.workStatus,
+          lastSeenAt: seenAt,
+        },
+        ...updatedUsers,
+      ];
+    });
+  }, [currentSessionUser]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !currentSessionUser) return;
+
+    const initialTouchTimeoutId = window.setTimeout(
+      touchCurrentUserPresence,
+      0,
+    );
+
+    const intervalId = window.setInterval(
+      touchCurrentUserPresence,
+      PRESENCE_HEARTBEAT_MS,
+    );
+    const handleFocus = () => touchCurrentUserPresence();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        touchCurrentUserPresence();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearTimeout(initialTouchTimeoutId);
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [currentSessionUser, isAuthenticated, touchCurrentUserPresence]);
 
   useEffect(() => {
     if (!isCheckingSession && isAuthenticated && activeNav === "admin") {
@@ -1610,6 +1716,7 @@ export function UniparWorkspace({
         isOnline: user.isOnline,
         chatStatus: user.chatStatus,
         workStatus: user.workStatus,
+        lastSeenAt: user.lastSeenAt,
       };
     },
     [directoryUsersByIdentity],
@@ -1889,6 +1996,7 @@ export function UniparWorkspace({
           isOnline: user.isOnline,
           chatStatus: user.chatStatus,
           workStatus: user.workStatus,
+          lastSeenAt: user.lastSeenAt,
           isTyping: false,
           isArchived: storedContact?.isArchived ?? false,
           isMuted: storedContact?.isMuted ?? false,
@@ -1999,6 +2107,12 @@ export function UniparWorkspace({
           target.kind === "contact" || target.id !== selectedGroup?.id,
       ),
     [forwardTargets, selectedGroup?.id],
+  );
+  const isStoredDirectContactForCurrentUser = useCallback(
+    (contact: Contact, contactId: string) =>
+      contact.id === contactId &&
+      (!contact.ownerId || contact.ownerId === currentAnnouncementUser.id),
+    [currentAnnouncementUser.id],
   );
   const notificationMessageSnapshot = useMemo(() => {
     if (!currentAnnouncementUser.id) {
@@ -3009,7 +3123,7 @@ export function UniparWorkspace({
 
     setContacts((currentContacts) =>
       currentContacts.map((contact) =>
-        contact.id === contactId
+        isStoredDirectContactForCurrentUser(contact, contactId)
           ? {
               ...buildUpdatedContactSummary(contact, updatedMessages),
               unreadCount: 0,
@@ -3019,7 +3133,7 @@ export function UniparWorkspace({
     );
     setArchivedContacts((currentContacts) =>
       currentContacts.map((contact) =>
-        contact.id === contactId
+        isStoredDirectContactForCurrentUser(contact, contactId)
           ? {
               ...buildUpdatedContactSummary(contact, updatedMessages),
               unreadCount: 0,
@@ -3109,16 +3223,30 @@ export function UniparWorkspace({
   };
 
   const handleArchiveContact = (contactId: string) => {
-    const contact = contacts.find((c) => c.id === contactId);
+    const contact =
+      displayContacts.find((currentContact) => currentContact.id === contactId) ??
+      contacts.find((currentContact) =>
+        isStoredDirectContactForCurrentUser(currentContact, contactId),
+      );
     if (contact) {
+      const archivedContact = {
+        ...contact,
+        ownerId: currentAnnouncementUser.id,
+        isArchived: true,
+      };
+
       setContacts(
-        contacts.map((c) =>
-          c.id === contactId ? { ...c, isArchived: true } : c,
+        contacts.filter(
+          (currentContact) =>
+            !isStoredDirectContactForCurrentUser(currentContact, contactId),
         ),
       );
       setArchivedContacts([
-        ...archivedContacts,
-        { ...contact, isArchived: true },
+        archivedContact,
+        ...archivedContacts.filter(
+          (currentContact) =>
+            !isStoredDirectContactForCurrentUser(currentContact, contactId),
+        ),
       ]);
       if (selectedContact?.id === contactId) {
         setSelectedContact(null);
@@ -3128,14 +3256,29 @@ export function UniparWorkspace({
   };
 
   const handleUnarchiveContact = (contactId: string) => {
-    const contact = archivedContacts.find((c) => c.id === contactId);
+    const contact = archivedContacts.find((currentContact) =>
+      isStoredDirectContactForCurrentUser(currentContact, contactId),
+    );
     if (contact) {
-      setArchivedContacts(archivedContacts.filter((c) => c.id !== contactId));
-      setContacts(
-        contacts.map((c) =>
-          c.id === contactId ? { ...c, isArchived: false } : c,
+      const restoredContact = {
+        ...contact,
+        ownerId: currentAnnouncementUser.id,
+        isArchived: false,
+      };
+
+      setArchivedContacts(
+        archivedContacts.filter(
+          (currentContact) =>
+            !isStoredDirectContactForCurrentUser(currentContact, contactId),
         ),
       );
+      setContacts([
+        restoredContact,
+        ...contacts.filter(
+          (currentContact) =>
+            !isStoredDirectContactForCurrentUser(currentContact, contactId),
+        ),
+      ]);
       toast.success("Conversa desarquivada.");
     }
   };
@@ -3144,17 +3287,52 @@ export function UniparWorkspace({
     const contact =
       selectedContact?.id === contactId
         ? selectedContact
-        : contacts.find((currentContact) => currentContact.id === contactId) ??
-          archivedContacts.find(
-            (currentContact) => currentContact.id === contactId,
+        : contacts.find((currentContact) =>
+            isStoredDirectContactForCurrentUser(currentContact, contactId),
+          ) ??
+          archivedContacts.find((currentContact) =>
+            isStoredDirectContactForCurrentUser(currentContact, contactId),
           );
     const willMute = !(contact?.isMuted ?? false);
 
     setContacts(
       contacts.map((c) =>
-        c.id === contactId ? { ...c, isMuted: !c.isMuted } : c,
+        isStoredDirectContactForCurrentUser(c, contactId)
+          ? { ...c, isMuted: !c.isMuted }
+          : c,
       ),
     );
+    setArchivedContacts((currentContacts) =>
+      currentContacts.map((currentContact) =>
+        isStoredDirectContactForCurrentUser(currentContact, contactId)
+          ? { ...currentContact, isMuted: !currentContact.isMuted }
+          : currentContact,
+      ),
+    );
+    if (
+      contact &&
+      !contacts.some((currentContact) =>
+        isStoredDirectContactForCurrentUser(currentContact, contactId),
+      ) &&
+      !archivedContacts.some((currentContact) =>
+        isStoredDirectContactForCurrentUser(currentContact, contactId),
+      )
+    ) {
+      const ownedContact = {
+        ...contact,
+        ownerId: currentAnnouncementUser.id,
+        isMuted: willMute,
+      };
+
+      if (contact.isArchived) {
+        setArchivedContacts((currentContacts) => [
+          ownedContact,
+          ...currentContacts,
+        ]);
+      } else {
+        setContacts((currentContacts) => [ownedContact, ...currentContacts]);
+      }
+    }
     if (selectedContact?.id === contactId) {
       setSelectedContact({
         ...selectedContact,
@@ -3168,26 +3346,52 @@ export function UniparWorkspace({
     const contact =
       selectedContact?.id === contactId
         ? selectedContact
-        : contacts.find((currentContact) => currentContact.id === contactId) ??
-          archivedContacts.find(
-            (currentContact) => currentContact.id === contactId,
+        : contacts.find((currentContact) =>
+            isStoredDirectContactForCurrentUser(currentContact, contactId),
+          ) ??
+          archivedContacts.find((currentContact) =>
+            isStoredDirectContactForCurrentUser(currentContact, contactId),
           );
     const willPin = !(contact?.isPinned ?? false);
 
     setContacts((currentContacts) =>
       currentContacts.map((contact) =>
-        contact.id === contactId
+        isStoredDirectContactForCurrentUser(contact, contactId)
           ? { ...contact, isPinned: !contact.isPinned }
           : contact,
       ),
     );
     setArchivedContacts((currentContacts) =>
       currentContacts.map((contact) =>
-        contact.id === contactId
+        isStoredDirectContactForCurrentUser(contact, contactId)
           ? { ...contact, isPinned: !contact.isPinned }
           : contact,
       ),
     );
+    if (
+      contact &&
+      !contacts.some((currentContact) =>
+        isStoredDirectContactForCurrentUser(currentContact, contactId),
+      ) &&
+      !archivedContacts.some((currentContact) =>
+        isStoredDirectContactForCurrentUser(currentContact, contactId),
+      )
+    ) {
+      const ownedContact = {
+        ...contact,
+        ownerId: currentAnnouncementUser.id,
+        isPinned: willPin,
+      };
+
+      if (contact.isArchived) {
+        setArchivedContacts((currentContacts) => [
+          ownedContact,
+          ...currentContacts,
+        ]);
+      } else {
+        setContacts((currentContacts) => [ownedContact, ...currentContacts]);
+      }
+    }
     setSelectedContact((currentContact) =>
       currentContact?.id === contactId
         ? { ...currentContact, isPinned: !currentContact.isPinned }
@@ -3198,9 +3402,11 @@ export function UniparWorkspace({
 
   const findConversationContact = (contactId: string) =>
     displayContacts.find((currentContact) => currentContact.id === contactId) ??
-    contacts.find((currentContact) => currentContact.id === contactId) ??
-    archivedContacts.find(
-      (currentContact) => currentContact.id === contactId,
+    contacts.find((currentContact) =>
+      isStoredDirectContactForCurrentUser(currentContact, contactId),
+    ) ??
+    archivedContacts.find((currentContact) =>
+      isStoredDirectContactForCurrentUser(currentContact, contactId),
     ) ??
     (selectedContact?.id === contactId ? selectedContact : null);
   const findGroupConversation = (groupId: string) =>
@@ -3261,7 +3467,7 @@ export function UniparWorkspace({
     });
     setContacts((currentContacts) =>
       currentContacts.map((contact) =>
-        contact.id === contactId
+        isStoredDirectContactForCurrentUser(contact, contactId)
           ? {
               ...contact,
               lastMessage: "Conversa limpa",
@@ -3274,7 +3480,7 @@ export function UniparWorkspace({
     );
     setArchivedContacts((currentContacts) =>
       currentContacts.map((contact) =>
-        contact.id === contactId
+        isStoredDirectContactForCurrentUser(contact, contactId)
           ? {
               ...contact,
               lastMessage: "Conversa limpa",
@@ -3305,14 +3511,14 @@ export function UniparWorkspace({
 
     setContacts((currentContacts) =>
       currentContacts.map((contact) =>
-        contact.id === contactId
+        isStoredDirectContactForCurrentUser(contact, contactId)
           ? hideConversationForUser(contact, currentUserId)
           : contact,
       ),
     );
     setArchivedContacts((currentContacts) =>
       currentContacts.map((contact) =>
-        contact.id === contactId
+        isStoredDirectContactForCurrentUser(contact, contactId)
           ? hideConversationForUser(contact, currentUserId)
           : contact,
       ),
@@ -3695,14 +3901,14 @@ export function UniparWorkspace({
     setSelectedContact(openedContact);
     setContacts((currentContacts) =>
       currentContacts.map((currentContact) =>
-        currentContact.id === contact.id
+        isStoredDirectContactForCurrentUser(currentContact, contact.id)
           ? { ...currentContact, unreadCount: 0 }
           : currentContact,
       ),
     );
     setArchivedContacts((currentContacts) =>
       currentContacts.map((currentContact) =>
-        currentContact.id === contact.id
+        isStoredDirectContactForCurrentUser(currentContact, contact.id)
           ? { ...currentContact, unreadCount: 0 }
           : currentContact,
       ),
@@ -4023,11 +4229,17 @@ export function UniparWorkspace({
         unreadCount: 0,
       };
       setArchivedContacts(
-        archivedContacts.filter((contact) => contact.id !== archivedContact.id),
+        archivedContacts.filter(
+          (contact) =>
+            !isStoredDirectContactForCurrentUser(contact, archivedContact.id),
+        ),
       );
       setContacts([
         restoredContact,
-        ...contacts.filter((contact) => contact.id !== archivedContact.id),
+        ...contacts.filter(
+          (contact) =>
+            !isStoredDirectContactForCurrentUser(contact, archivedContact.id),
+        ),
       ]);
       setSelectedContact(restoredContact);
       setShowArchived(false);
@@ -4049,6 +4261,7 @@ export function UniparWorkspace({
       isOnline: user.isOnline,
       chatStatus: user.chatStatus,
       workStatus: user.workStatus,
+      lastSeenAt: user.lastSeenAt,
       isTyping: false,
       isArchived: false,
       isMuted: false,
@@ -4144,13 +4357,25 @@ export function UniparWorkspace({
 
     setContacts((currentContacts) => {
       const currentContactIds = new Set(
-        currentContacts.map((contact) => contact.id),
+        currentContacts
+          .filter((contact) =>
+            isStoredDirectContactForCurrentUser(contact, contact.id),
+          )
+          .map((contact) => contact.id),
       );
       const archivedContactIds = new Set(
-        archivedContacts.map((contact) => contact.id),
+        archivedContacts
+          .filter((contact) =>
+            isStoredDirectContactForCurrentUser(contact, contact.id),
+          )
+          .map((contact) => contact.id),
       );
       const restoredContacts = archivedContacts
-        .filter((contact) => contactTargetIds.has(contact.id))
+        .filter(
+          (contact) =>
+            contactTargetIds.has(contact.id) &&
+            isStoredDirectContactForCurrentUser(contact, contact.id),
+        )
         .map((contact) => ({
           ...contact,
           isArchived: false,
@@ -4167,6 +4392,7 @@ export function UniparWorkspace({
         )
         .map<Contact>((user) => ({
           id: user.id,
+          ownerId: currentAnnouncementUser.id,
           name: user.name,
           avatar: user.avatar,
           email: user.email,
@@ -4177,13 +4403,17 @@ export function UniparWorkspace({
           lastMessageStatus: "sent",
           unreadCount: 0,
           isOnline: user.isOnline,
+          chatStatus: user.chatStatus,
+          workStatus: user.workStatus,
+          lastSeenAt: user.lastSeenAt,
           isTyping: false,
           isArchived: false,
           isMuted: false,
           isPinned: false,
         }));
       const updatedContacts = currentContacts.map((contact) =>
-        contactTargetIds.has(contact.id)
+        contactTargetIds.has(contact.id) &&
+        isStoredDirectContactForCurrentUser(contact, contact.id)
           ? {
               ...contact,
               isArchived: false,
@@ -4229,7 +4459,11 @@ export function UniparWorkspace({
     });
 
     setArchivedContacts((currentContacts) =>
-      currentContacts.filter((contact) => !contactTargetIds.has(contact.id)),
+      currentContacts.filter(
+        (contact) =>
+          !contactTargetIds.has(contact.id) ||
+          !isStoredDirectContactForCurrentUser(contact, contact.id),
+      ),
     );
     setArchivedGroups((currentGroups) =>
       currentGroups.filter((group) => !groupTargetIds.has(group.id)),
@@ -4329,6 +4563,8 @@ export function UniparWorkspace({
 
         return nextIndicators;
       });
+
+      window.setTimeout(() => flushBackendStateSaveRef.current(), 80);
     },
     [currentAnnouncementUser.id, currentAnnouncementUser.name],
   );
@@ -4590,6 +4826,7 @@ export function UniparWorkspace({
         ...currentSessionUser,
         ...profile,
         avatar: profile.avatar ?? currentSessionUser.avatar,
+        lastSeenAt: new Date(),
       };
 
       setCurrentSessionUser(updatedUser);
@@ -4614,6 +4851,7 @@ export function UniparWorkspace({
             about: updatedUser.about,
             chatStatus: updatedUser.chatStatus,
             workStatus: updatedUser.workStatus,
+            lastSeenAt: updatedUser.lastSeenAt,
           };
         });
 
@@ -4633,6 +4871,7 @@ export function UniparWorkspace({
             about: updatedUser.about,
             chatStatus: updatedUser.chatStatus,
             workStatus: updatedUser.workStatus,
+            lastSeenAt: updatedUser.lastSeenAt,
           },
           ...updatedUsers,
         ];
@@ -4654,6 +4893,7 @@ export function UniparWorkspace({
           isOnline: chatStatus === "online",
           chatStatus,
           workStatus: updatedUser.workStatus,
+          lastSeenAt: updatedUser.lastSeenAt,
         };
       };
 
@@ -4684,13 +4924,30 @@ export function UniparWorkspace({
   );
 
   const handleLogin = (user: AuthenticatedUser) => {
-    setCurrentSessionUser(user);
+    setCurrentSessionUser({
+      ...user,
+      avatar: user.avatar ?? "",
+      lastSeenAt: user.lastSeenAt ?? new Date(),
+    });
     setIsAuthenticated(true);
     setIsCheckingSession(false);
     navigateTo(activeNav, "replace");
   };
 
   const handleLogout = () => {
+    if (currentSessionUser) {
+      const seenAt = new Date();
+
+      setAdminUsers((currentUsers) =>
+        currentUsers.map((user) =>
+          user.id === currentSessionUser.id ||
+          user.email.toLowerCase() === currentSessionUser.email.toLowerCase()
+            ? { ...user, chatStatus: "offline", lastSeenAt: seenAt }
+            : user,
+        ),
+      );
+    }
+
     clearCurrentSession().catch((error) => console.error(error));
     setIsAuthenticated(false);
     setIsCheckingSession(false);
@@ -5386,7 +5643,7 @@ export function UniparWorkspace({
         className={cn(
           "flex h-full min-w-0 flex-1 overflow-hidden",
           (activeNav === "chat" || activeNav === "grupos") &&
-            "chat-green-theme",
+            "chat-green-theme rounded-xl border bg-card/40 shadow-sm",
         )}
       >
         {activeNav === "admin" && currentSessionUser?.isAdmin === true ? (
@@ -5421,7 +5678,7 @@ export function UniparWorkspace({
             {/* Conversation List */}
             <div
               className={cn(
-                "h-full w-full border-r bg-card md:w-[340px] md:min-w-[300px] lg:w-[380px]",
+                "h-full w-full border-r bg-card/95 md:w-[340px] md:min-w-[300px] lg:w-[380px]",
                 selectedContact ? "hidden md:block" : "block",
               )}
             >
@@ -5530,11 +5787,15 @@ export function UniparWorkspace({
                   )}
                 </>
               ) : (
-                <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-muted/30 p-8">
-                  <div className="flex h-24 w-24 items-center justify-center rounded-full bg-primary/10">
+                <div className="relative flex h-full w-full flex-col items-center justify-center gap-4 overflow-hidden bg-background p-8">
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-5 rounded-xl border border-dashed border-border/55 md:inset-8"
+                  />
+                  <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 shadow-lg shadow-primary/5">
                     <MessageCircle className="h-12 w-12 text-primary" />
                   </div>
-                  <div className="text-center">
+                  <div className="relative text-center">
                     <h2 className="text-2xl font-semibold text-foreground">
                       Bem-vindo ao Chat
                     </h2>
@@ -5598,7 +5859,7 @@ export function UniparWorkspace({
           <>
             <div
               className={cn(
-                "h-full w-full border-r bg-card md:w-[340px] md:min-w-[300px] lg:w-[380px]",
+                "h-full w-full border-r bg-card/95 md:w-[340px] md:min-w-[300px] lg:w-[380px]",
                 selectedGroup ? "hidden md:block" : "block",
               )}
             >
@@ -5724,11 +5985,15 @@ export function UniparWorkspace({
                   )}
                 </>
               ) : (
-                <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-muted/30 p-8">
-                  <div className="flex h-24 w-24 items-center justify-center rounded-full bg-primary/10">
+                <div className="relative flex h-full w-full flex-col items-center justify-center gap-4 overflow-hidden bg-background p-8">
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-5 rounded-xl border border-dashed border-border/55 md:inset-8"
+                  />
+                  <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 shadow-lg shadow-primary/5">
                     <Users className="h-12 w-12 text-primary" />
                   </div>
-                  <div className="text-center">
+                  <div className="relative text-center">
                     <h2 className="text-2xl font-semibold text-foreground">
                       Grupos
                     </h2>

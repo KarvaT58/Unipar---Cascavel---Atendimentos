@@ -1,36 +1,96 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Unipar - Cascavel - Atendimentos
 
-## Getting Started
+Sistema SaaS para atendimentos, chat interno, grupos, equipe, anuncios/eventos,
+emprestimos, kanban e administracao.
 
-First, run the development server:
+## Desenvolvimento local
+
+Instale as dependencias:
+
+```bash
+npm install
+```
+
+Para desenvolver sem PostgreSQL, copie `.env.example` para `.env` e habilite:
+
+```bash
+LOCAL_DATA_ONLY="true"
+AUTH_OFFLINE_FALLBACK="true"
+LOCAL_AUTH_USER_SEED="true"
+LOCAL_AUTH_USER_EMAIL="dev@unipar.br"
+LOCAL_AUTH_USER_PASSWORD="12345678"
+```
+
+Com isso, o app salva os dados em `.local-data/` e cria um usuario local para
+login. A pasta `.local-data/` nao deve ser enviada para o GitHub.
+
+Rode o servidor:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Acesse `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Producao
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Em producao, use PostgreSQL e mantenha o modo local desligado:
 
-## Learn More
+```bash
+NODE_ENV="production"
+LOCAL_DATA_ONLY="false"
+AUTH_OFFLINE_FALLBACK="false"
+LOCAL_AUTH_USER_SEED="false"
+ALLOW_LOCAL_DATA_IN_PRODUCTION="false"
+```
 
-To learn more about Next.js, take a look at the following resources:
+Configure tambem:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+SESSION_SECRET="uma-chave-com-32-caracteres-ou-mais"
+DATABASE_URL="postgresql://usuario:senha@localhost:5432/unipar_atendimentos?schema=public"
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Build:
 
-## Deploy on Vercel
+```bash
+npm run prisma:generate
+npm run prisma:push
+npm run build
+npm run start
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Guia completo para SSH, PM2 e Nginx:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```text
+docs/deploy-ssh.md
+```
+
+## Healthcheck
+
+Com o app rodando:
+
+```bash
+curl http://localhost:3000/api/health
+```
+
+O endpoint retorna o estado do app, modo local e conexao com banco. Em producao,
+ele so deve retornar `ok: true` quando o PostgreSQL estiver configurado e
+respondendo.
+
+## Validacao
+
+Antes de publicar:
+
+```bash
+npm run lint
+npm run build
+```
+
+## Observacoes
+
+- Avatar do perfil ainda e salvo como base64 no estado do sistema. Isso e
+  suficiente para a fase atual, mas o ideal futuro e mover uploads para storage
+  dedicado.
+- Nao use `npm audit fix --force` sem revisar. O audit pode sugerir mudancas
+  quebrando Next/Prisma.

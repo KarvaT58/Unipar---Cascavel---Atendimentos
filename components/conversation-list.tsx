@@ -417,28 +417,51 @@ export function ConversationList({
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col bg-card/95">
       {/* Header */}
-      <div className="flex h-14 items-center justify-between border-b bg-card px-4">
+      <div className="flex h-16 items-center justify-between border-b bg-card/95 px-4">
         {showArchived ? (
           <>
             <Button variant="ghost" size="icon" onClick={onToggleArchived}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <h1 className="text-xl font-semibold text-foreground">
-              Arquivadas
-            </h1>
+            <div className="min-w-0 text-center">
+              <h1 className="truncate text-lg font-semibold text-foreground">
+                Arquivadas
+              </h1>
+              <p className="text-xs text-muted-foreground">
+                {filteredContacts.length}{" "}
+                {isGroupMode
+                  ? filteredContacts.length === 1
+                    ? "grupo"
+                    : "grupos"
+                  : filteredContacts.length === 1
+                    ? "conversa"
+                    : "conversas"}
+              </p>
+            </div>
             <div className="w-10" />
           </>
         ) : (
           <>
-            <div className="flex min-w-0 items-center">
-              <h1 className="text-xl font-semibold text-foreground">{title}</h1>
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-2">
+                <h1 className="truncate text-lg font-semibold text-foreground">
+                  {title}
+                </h1>
+                {filteredContacts.length > 0 && (
+                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/10 px-1.5 text-xs font-semibold text-primary">
+                    {filteredContacts.length}
+                  </span>
+                )}
+              </div>
+              <p className="truncate text-xs text-muted-foreground">
+                {isGroupMode ? "Conversas em equipe" : "Mensagens internas"}
+              </p>
             </div>
             <Button
-              variant="ghost"
               size="icon"
-              className="text-muted-foreground"
+              className="h-9 w-9 rounded-lg bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
               onClick={() => setIsNewConversationOpen(true)}
             >
               <Plus className="h-5 w-5" />
@@ -741,14 +764,14 @@ export function ConversationList({
       )}
 
       {/* Search */}
-      <div className="border-b bg-card p-3">
+      <div className="border-b bg-card/95 p-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder={searchPlaceholder}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="bg-muted pl-10"
+            className="h-10 rounded-lg border-border/70 bg-background/80 pl-10 shadow-inner shadow-black/5 focus-visible:ring-primary/40"
           />
         </div>
       </div>
@@ -757,10 +780,10 @@ export function ConversationList({
       {!showArchived && archivedCount > 0 && (
         <button
           onClick={onToggleArchived}
-          className="flex items-center gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-muted/50"
+          className="mx-2 mt-2 flex items-center gap-3 rounded-lg border border-border/60 bg-background/60 px-3 py-3 text-left transition-colors hover:bg-primary/5"
         >
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-            <Archive className="h-5 w-5 text-muted-foreground" />
+          <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10">
+            <Archive className="h-5 w-5 text-primary" />
           </div>
           <div className="flex flex-col">
             <span className="font-medium text-foreground">Arquivadas</span>
@@ -783,13 +806,14 @@ export function ConversationList({
         className="thin-gray-scrollbar scrollbar-gutter-auto min-h-0 flex-1 overflow-y-auto"
         onScroll={handleContactListScroll}
       >
-        <div className="divide-y">
+        <div className="space-y-1 p-2">
           {visibleContacts.map((contact) => (
             <div
               key={contact.id}
               className={cn(
-                "group flex cursor-pointer select-none items-center gap-3 px-4 py-3 transition-[background-color,box-shadow,transform] hover:bg-muted/50",
-                selectedContact?.id === contact.id && "bg-muted",
+                "group flex cursor-pointer select-none items-center gap-3 rounded-lg px-3 py-3 transition-[background-color,box-shadow,transform] hover:bg-muted/55",
+                selectedContact?.id === contact.id &&
+                  "bg-primary/10 shadow-[inset_3px_0_0_var(--primary)]",
                 activeLongPressContactId === contact.id &&
                   (openContactMenuId === contact.id
                     ? "long-press-selected"
@@ -805,7 +829,7 @@ export function ConversationList({
               onTouchStart={() => handleContactLongPressStart(contact.id)}
             >
               <div className="relative">
-                <Avatar className="h-12 w-12">
+                <Avatar className="h-12 w-12 ring-1 ring-border">
                   <AvatarImage src={contact.avatar} alt={contact.name} />
                   <AvatarFallback>
                     {contact.name.slice(0, 2).toUpperCase()}
@@ -963,7 +987,7 @@ export function ConversationList({
           ))}
 
           {filteredContacts.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="mx-1 mt-5 flex flex-col items-center justify-center rounded-lg border border-dashed bg-background/50 px-4 py-10 text-center">
               <p className="text-muted-foreground">
                 {showArchived
                   ? `Nenhum ${conversationLabel} arquivado`

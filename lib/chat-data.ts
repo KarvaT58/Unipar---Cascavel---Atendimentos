@@ -37,6 +37,8 @@ export interface Message {
   isForwarded?: boolean;
   isPinned?: boolean;
   isFavorite?: boolean;
+  pinnedForUserIds?: string[];
+  favoriteForUserIds?: string[];
   isEdited?: boolean;
   deletedForMe?: boolean;
   hiddenForUserIds?: string[];
@@ -75,6 +77,33 @@ export function getChatPresenceMeta(user: {
   return CHAT_PRESENCE_META[getChatPresenceStatus(user)];
 }
 
+export function formatLastSeenAt(date?: Date) {
+  if (!date) return "Offline";
+
+  const now = new Date();
+  const diffInMs = now.getTime() - date.getTime();
+  const diffInMinutes = Math.max(0, Math.floor(diffInMs / (1000 * 60)));
+
+  if (diffInMinutes < 1) return "Visto por ultimo agora";
+
+  const today = now.toDateString();
+  const yesterdayDate = new Date(now);
+  yesterdayDate.setDate(now.getDate() - 1);
+
+  if (date.toDateString() === today) {
+    return `Visto por ultimo hoje as ${formatTime(date)}`;
+  }
+
+  if (date.toDateString() === yesterdayDate.toDateString()) {
+    return `Visto por ultimo ontem as ${formatTime(date)}`;
+  }
+
+  return `Visto por ultimo em ${date.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+  })} as ${formatTime(date)}`;
+}
+
 export function isMessageHiddenForUser(message: Message, userId?: string) {
   if (message.deletedForMe) return true;
   if (!userId) return false;
@@ -88,6 +117,75 @@ export function hideMessageForUser(message: Message, userId: string): Message {
   return {
     ...message,
     hiddenForUserIds: [...(message.hiddenForUserIds ?? []), userId],
+  };
+}
+
+function hasScopedMessageFlag(
+  scopedUserIds: string[] | undefined,
+  fallbackFlag: boolean | undefined,
+  userId: string,
+) {
+  if (scopedUserIds) return scopedUserIds.includes(userId);
+
+  return Boolean(fallbackFlag);
+}
+
+function toggleScopedMessageFlag(
+  scopedUserIds: string[] | undefined,
+  fallbackFlag: boolean | undefined,
+  userId: string,
+) {
+  const currentUserIds = scopedUserIds
+    ? [...scopedUserIds]
+    : fallbackFlag
+      ? [userId]
+      : [];
+  const nextUserIds = currentUserIds.includes(userId)
+    ? currentUserIds.filter((currentUserId) => currentUserId !== userId)
+    : [...currentUserIds, userId];
+
+  return Array.from(new Set(nextUserIds));
+}
+
+export function isMessagePinnedForUser(message: Message, userId: string) {
+  return hasScopedMessageFlag(message.pinnedForUserIds, message.isPinned, userId);
+}
+
+export function isMessageFavoriteForUser(message: Message, userId: string) {
+  return hasScopedMessageFlag(
+    message.favoriteForUserIds,
+    message.isFavorite,
+    userId,
+  );
+}
+
+export function toggleMessagePinnedForUser(
+  message: Message,
+  userId: string,
+): Message {
+  return {
+    ...message,
+    isPinned: undefined,
+    pinnedForUserIds: toggleScopedMessageFlag(
+      message.pinnedForUserIds,
+      message.isPinned,
+      userId,
+    ),
+  };
+}
+
+export function toggleMessageFavoriteForUser(
+  message: Message,
+  userId: string,
+): Message {
+  return {
+    ...message,
+    isFavorite: undefined,
+    favoriteForUserIds: toggleScopedMessageFlag(
+      message.favoriteForUserIds,
+      message.isFavorite,
+      userId,
+    ),
   };
 }
 
@@ -107,6 +205,7 @@ export interface Contact {
   isOnline: boolean;
   chatStatus?: ChatPresenceStatus;
   workStatus?: string;
+  lastSeenAt?: Date;
   isTyping: boolean;
   typingText?: string;
   isArchived: boolean;
@@ -123,6 +222,7 @@ export interface DirectoryUser {
   isOnline: boolean;
   chatStatus?: ChatPresenceStatus;
   workStatus?: string;
+  lastSeenAt?: Date;
 }
 
 export const contacts: Contact[] = [];

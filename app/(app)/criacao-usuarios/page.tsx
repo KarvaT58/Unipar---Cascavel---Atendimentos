@@ -5,6 +5,7 @@ import {
   listOfflineUsers,
   listPendingOfflineAccessRequests,
 } from "@/lib/offline-auth-store"
+import { canUseOfflineFallback } from "@/lib/local-mode"
 import { prisma } from "@/lib/prisma"
 import { getSectorLabel } from "@/lib/sectors"
 import { decryptString } from "@/lib/security"
@@ -50,12 +51,18 @@ export default async function CriacaoUsuariosPage() {
       users,
       databaseError: undefined,
     }))
-    .catch(async () => ({
+    .catch(async (error) => {
+      if (!canUseOfflineFallback()) {
+        throw error
+      }
+
+      return {
       requests: await listPendingOfflineAccessRequests(),
       users: await listOfflineUsers(),
       databaseError:
         "Banco de dados indisponível. Modo local de teste ativo até o PostgreSQL voltar.",
-    }))
+      }
+    })
 
   return (
     <UserCreationAdmin

@@ -5,6 +5,10 @@ import {
   createOfflineSession,
   findOfflineUserByEmail,
 } from "@/lib/offline-auth-store"
+import {
+  canUseOfflineFallback,
+  isLocalDataOnlyEnabled,
+} from "@/lib/local-mode"
 import { prisma } from "@/lib/prisma"
 import { createSession, setSessionCookie } from "@/lib/session"
 import {
@@ -18,7 +22,8 @@ export async function POST(request: NextRequest) {
   const email = normalizeEmail(getString(body, "email"))
   const password = getString(body, "password")
   const passwordDigits = onlyDigits(password)
-  const passwordCandidate = passwordDigits.length === 11 ? passwordDigits : password
+  const passwordCandidate =
+    passwordDigits.length === 11 ? passwordDigits : password
 
   if (!email || !password) {
     return NextResponse.json(
@@ -34,14 +39,15 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  if (isLocalDataOnlyEnabled()) {
+    return loginOfflineUser(email, passwordCandidate, request)
+  }
+
   try {
     const user = await prisma.user.findUnique({ where: { email } })
 
     if (!user || user.status !== "ACTIVE") {
-      return NextResponse.json(
-        { message: "E-mail ou senha inválidos." },
-        { status: 401 }
-      )
+      return invalidCredentialsResponse()
     }
 
     const passwordMatches = await bcrypt.compare(
@@ -50,10 +56,7 @@ export async function POST(request: NextRequest) {
     )
 
     if (!passwordMatches) {
-      return NextResponse.json(
-        { message: "E-mail ou senha inválidos." },
-        { status: 401 }
-      )
+      return invalidCredentialsResponse()
     }
 
     const session = await createSession(user.id, request)
@@ -71,46 +74,81 @@ export async function POST(request: NextRequest) {
 
     return response
   } catch {
-    const offlineUser = await findOfflineUserByEmail(email).catch(() => null)
-
-    if (offlineUser) {
-      const passwordMatches = await bcrypt.compare(
-        passwordCandidate,
-        offlineUser.passwordHash
-      )
-
-      if (!passwordMatches) {
-        return NextResponse.json(
-          { message: "E-mail ou senha inválidos." },
-          { status: 401 }
-        )
-      }
-
-      const session = await createOfflineSession(offlineUser.id, request)
-      const response = NextResponse.json({
-        user: {
-          id: offlineUser.id,
-          name: offlineUser.name,
-          email: offlineUser.email,
-          sector: offlineUser.sector,
-          role: offlineUser.role,
+    if (!canUseOfflineFallback()) {
+      return NextResponse.json(
+        {
+          message:
+            "Banco de dados indisponivel no momento. Tente novamente em instantes.",
         },
-        offline: true,
-      })
+        { status: 503 }
+      )
+    }
 
-      setSessionCookie(response, session.token, session.expiresAt)
+    const offlineResponse = await loginOfflineUser(
+      email,
+      passwordCandidate,
+      request
+    )
 
-      return response
+    if (offlineResponse.status !== 503) {
+      return offlineResponse
     }
 
     return NextResponse.json(
       {
         message:
-          "Banco de dados indisponível no momento. No modo local, libere uma solicitação em Criação de usuários antes de entrar.",
+          "Banco de dados indisponivel no momento. O usuario local inicial nao foi criado.",
       },
       { status: 503 }
     )
   }
+}
+
+async function loginOfflineUser(
+  email: string,
+  passwordCandidate: string,
+  request: NextRequest
+) {
+  const offlineUser = await findOfflineUserByEmail(email).catch(() => null)
+
+  if (!offlineUser) {
+    return NextResponse.json(
+      { message: "Usuario local nao encontrado." },
+      { status: 503 }
+    )
+  }
+
+  const passwordMatches = await bcrypt.compare(
+    passwordCandidate,
+    offlineUser.passwordHash
+  )
+
+  if (!passwordMatches) {
+    return invalidCredentialsResponse()
+  }
+
+  const session = await createOfflineSession(offlineUser.id, request)
+  const response = NextResponse.json({
+    user: {
+      id: offlineUser.id,
+      name: offlineUser.name,
+      email: offlineUser.email,
+      sector: offlineUser.sector,
+      role: offlineUser.role,
+    },
+    offline: true,
+  })
+
+  setSessionCookie(response, session.token, session.expiresAt)
+
+  return response
+}
+
+function invalidCredentialsResponse() {
+  return NextResponse.json(
+    { message: "E-mail ou senha invalidos." },
+    { status: 401 }
+  )
 }
 
 function getString(body: unknown, key: string) {

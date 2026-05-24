@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { isLocalDataOnlyEnabled } from "@/lib/local-mode"
 import { getSessionUser } from "@/lib/session"
 
 export const dynamic = "force-dynamic"
@@ -14,6 +15,6 @@ export async function PUT() {
 
   return NextResponse.json({
     ok: true,
-    databaseConnected: true,
+    databaseConnected: !isLocalDataOnlyEnabled(),
   })
 }

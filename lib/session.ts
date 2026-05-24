@@ -5,6 +5,10 @@ import {
   destroyOfflineSession,
   getOfflineSessionUser,
 } from "@/lib/offline-auth-store"
+import {
+  canUseOfflineFallback,
+  isLocalDataOnlyEnabled,
+} from "@/lib/local-mode"
 import { prisma } from "@/lib/prisma"
 import { createRandomToken, hashToken } from "@/lib/security"
 
@@ -53,6 +57,10 @@ export async function getSessionUser() {
     return null
   }
 
+  if (isLocalDataOnlyEnabled()) {
+    return getOfflineSessionUser(token)
+  }
+
   try {
     const tokenHash = hashToken(token)
     const session = await prisma.session.findUnique({
@@ -74,12 +82,17 @@ export async function getSessionUser() {
 
     return session.user
   } catch {
-    return getOfflineSessionUser(token)
+    return canUseOfflineFallback() ? getOfflineSessionUser(token) : null
   }
 }
 
 export async function destroySession(token?: string) {
   if (!token) {
+    return
+  }
+
+  if (isLocalDataOnlyEnabled()) {
+    await destroyOfflineSession(token)
     return
   }
 

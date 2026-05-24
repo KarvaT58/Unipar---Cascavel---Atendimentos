@@ -84,10 +84,15 @@ import {
   PanelTop,
 } from "lucide-react";
 import {
+  formatLastSeenAt,
   getChatPresenceMeta,
   getChatPresenceStatus,
   hideMessageForUser,
+  isMessageFavoriteForUser,
   isMessageHiddenForUser,
+  isMessagePinnedForUser,
+  toggleMessageFavoriteForUser,
+  toggleMessagePinnedForUser,
   type Contact,
   type DirectoryUser,
   type Message,
@@ -1107,7 +1112,12 @@ export function ChatWindow({
   const recordingAudioChunksRef = useRef<Blob[]>([]);
   const isAttachmentComposerOpen = pendingAttachments.length > 0;
   const conversationLabel = isGroup ? "grupo" : "conversa";
+  const contactPresenceStatus = getChatPresenceStatus(contact);
   const contactPresence = getChatPresenceMeta(contact);
+  const contactPresenceLabel =
+    !isGroup && contactPresenceStatus === "offline"
+      ? formatLastSeenAt(contact.lastSeenAt)
+      : contactPresence.label;
   const groupOnlineParticipants = groupParticipants.filter(
     (participant) => getChatPresenceStatus(participant) === "online",
   );
@@ -1129,7 +1139,7 @@ export function ChatWindow({
   );
   const pinnedMessages = messages.filter(
     (message) =>
-      message.isPinned &&
+      isMessagePinnedForUser(message, currentUser.id) &&
       !isMessageHiddenForUser(message, currentUser.id) &&
       !message.deletedForEveryone,
   );
@@ -1386,7 +1396,10 @@ export function ChatWindow({
     ? mediaMessages.findIndex((message) => message.id === mediaViewerMessage.id)
     : -1;
   const mediaViewerPinDisabled =
-    Boolean(mediaViewerMessage && !mediaViewerMessage.isPinned) &&
+    Boolean(
+      mediaViewerMessage &&
+        !isMessagePinnedForUser(mediaViewerMessage, currentUser.id),
+    ) &&
     pinnedMessages.length >= 3;
   const selectedDeleteMessages = messagesVisibleToCurrentUser.filter(
     (message) => selectedDeleteMessageIds.includes(message.id),
@@ -2102,6 +2115,8 @@ export function ChatWindow({
               isPriority: false,
               isPinned: false,
               isFavorite: false,
+              pinnedForUserIds: [],
+              favoriteForUserIds: [],
               deletedForEveryone: true,
             }
           : message,
@@ -2223,12 +2238,14 @@ export function ChatWindow({
   };
 
   const handleTogglePinMessage = (message: Message) => {
-    if (!message.isPinned && pinnedMessages.length >= 3) {
+    const isPinned = isMessagePinnedForUser(message, currentUser.id);
+
+    if (!isPinned && pinnedMessages.length >= 3) {
       toast.warning("Limite de mensagens fixadas atingido.");
       return;
     }
 
-    if (!message.isPinned) {
+    if (!isPinned) {
       setActivePinnedMessageId(message.id);
     } else if (activePinnedMessageId === message.id) {
       setActivePinnedMessageId(null);
@@ -2237,23 +2254,25 @@ export function ChatWindow({
     setMessages((currentMessages) =>
       currentMessages.map((currentMessage) =>
         currentMessage.id === message.id
-          ? { ...currentMessage, isPinned: !currentMessage.isPinned }
+          ? toggleMessagePinnedForUser(currentMessage, currentUser.id)
           : currentMessage,
       ),
     );
-    toast.success(message.isPinned ? "Mensagem desfixada." : "Mensagem fixada.");
+    toast.success(isPinned ? "Mensagem desfixada." : "Mensagem fixada.");
   };
 
   const handleToggleFavoriteMessage = (message: Message) => {
+    const isFavorite = isMessageFavoriteForUser(message, currentUser.id);
+
     setMessages((currentMessages) =>
       currentMessages.map((currentMessage) =>
         currentMessage.id === message.id
-          ? { ...currentMessage, isFavorite: !currentMessage.isFavorite }
+          ? toggleMessageFavoriteForUser(currentMessage, currentUser.id)
           : currentMessage,
       ),
     );
     toast.success(
-      message.isFavorite
+      isFavorite
         ? "Mensagem removida dos favoritos."
         : "Mensagem favoritada.",
     );
@@ -2305,7 +2324,9 @@ export function ChatWindow({
   const getMessageActions = (message: Message) => {
     if (message.deletedForEveryone) return [];
 
-    const pinLimitReached = !message.isPinned && pinnedMessages.length >= 3;
+    const isPinned = isMessagePinnedForUser(message, currentUser.id);
+    const isFavorite = isMessageFavoriteForUser(message, currentUser.id);
+    const pinLimitReached = !isPinned && pinnedMessages.length >= 3;
 
     return [
       {
@@ -2338,7 +2359,7 @@ export function ChatWindow({
         : []),
       {
         id: "pin",
-        label: message.isPinned
+        label: isPinned
           ? "Desfixar"
           : pinLimitReached
             ? "Limite de 3 fixadas"
@@ -2349,7 +2370,7 @@ export function ChatWindow({
       },
       {
         id: "favorite",
-        label: message.isFavorite ? "Desfavoritar" : "Favoritar",
+        label: isFavorite ? "Desfavoritar" : "Favoritar",
         icon: Star,
         onSelect: () => handleToggleFavoriteMessage(message),
       },
@@ -2357,9 +2378,9 @@ export function ChatWindow({
   };
 
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-background">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-background/95">
       {/* Header */}
-      <div className="flex h-14 shrink-0 items-center gap-3 border-b bg-card px-2 md:px-4">
+      <div className="flex h-16 shrink-0 items-center gap-3 border-b bg-card/95 px-2 shadow-sm md:px-4">
         <Button
           variant="ghost"
           size="icon"
@@ -2374,7 +2395,7 @@ export function ChatWindow({
           onClick={onShowContactDetails}
         >
           <div className="relative">
-            <Avatar className="h-10 w-10">
+            <Avatar className="h-10 w-10 ring-1 ring-border">
               <AvatarImage src={contact.avatar} alt={contact.name} />
               <AvatarFallback>
                 {contact.name.slice(0, 2).toUpperCase()}
@@ -2400,7 +2421,7 @@ export function ChatWindow({
               ) : isGroup ? (
                 groupHeaderStatus
               ) : (
-                contactPresence.label
+                contactPresenceLabel
               )}
             </span>
           </div>
@@ -2863,10 +2884,13 @@ export function ChatWindow({
                     }
                   />
                   <MediaToolbarButton
-                    active={mediaViewerMessage.isFavorite}
+                    active={isMessageFavoriteForUser(
+                      mediaViewerMessage,
+                      currentUser.id,
+                    )}
                     icon={Star}
                     label={
-                      mediaViewerMessage.isFavorite
+                      isMessageFavoriteForUser(mediaViewerMessage, currentUser.id)
                         ? "Desfavoritar"
                         : "Favoritar"
                     }
@@ -2875,10 +2899,17 @@ export function ChatWindow({
                     }
                   />
                   <MediaToolbarButton
-                    active={mediaViewerMessage.isPinned}
+                    active={isMessagePinnedForUser(
+                      mediaViewerMessage,
+                      currentUser.id,
+                    )}
                     disabled={mediaViewerPinDisabled}
                     icon={Pin}
-                    label={mediaViewerMessage.isPinned ? "Desfixar" : "Fixar"}
+                    label={
+                      isMessagePinnedForUser(mediaViewerMessage, currentUser.id)
+                        ? "Desfixar"
+                        : "Fixar"
+                    }
                     onClick={() => handleTogglePinMessage(mediaViewerMessage)}
                   />
                   <MediaToolbarButton
@@ -3042,14 +3073,14 @@ export function ChatWindow({
           {/* Messages */}
           <div className="relative min-h-0 flex-1">
             <div
-              className="thin-gray-scrollbar h-full overflow-y-auto p-4"
+              className="thin-gray-scrollbar h-full overflow-y-auto bg-background px-3 py-4 md:px-5"
               ref={scrollRef}
               onScroll={handleMessagesScroll}
             >
               <div className="flex min-h-full flex-col gap-1">
                 {visibleMessages.length === 0 && (
                   <div className="flex min-h-full items-center justify-center px-4 py-12 text-center">
-                    <div className="max-w-sm rounded-lg bg-card/70 px-5 py-4 shadow-sm ring-1 ring-border">
+                    <div className="max-w-sm rounded-lg border bg-card/80 px-5 py-4 shadow-sm">
                       <p className="font-medium text-foreground">
                         {isGroup
                           ? "Este grupo ainda não tem mensagens."
@@ -3068,7 +3099,7 @@ export function ChatWindow({
                   if (item.type === "date") {
                     return (
                       <div key={item.id} className="flex justify-center py-3">
-                        <span className="rounded-lg bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground shadow-sm">
+                        <span className="rounded-lg border bg-card/85 px-3 py-1 text-xs font-semibold text-muted-foreground shadow-sm">
                           {formatMessageDateSeparator(item.date)}
                         </span>
                       </div>
@@ -3143,7 +3174,7 @@ export function ChatWindow({
                           >
                             <div
                               className={cn(
-                                "relative max-w-[min(78%,32rem)] rounded-lg px-3 py-2 shadow-sm transition-[box-shadow,background-color,transform] md:max-w-[min(62%,34rem)]",
+                                "relative max-w-[min(78%,32rem)] rounded-xl px-3 py-2 shadow-sm transition-[box-shadow,background-color,transform] md:max-w-[min(62%,34rem)]",
                                 ownMessage
                                   ? "rounded-br-sm bg-chat-outgoing text-foreground"
                                   : "rounded-bl-sm bg-chat-incoming text-foreground",
@@ -3221,10 +3252,16 @@ export function ChatWindow({
 
                               <div className="mt-1 flex items-center justify-end gap-2">
                                 <div className="ml-auto flex items-center gap-1">
-                                  {message.isFavorite && (
+                                  {isMessageFavoriteForUser(
+                                    message,
+                                    currentUser.id,
+                                  ) && (
                                     <Star className="h-3.5 w-3.5 fill-current text-muted-foreground" />
                                   )}
-                                  {message.isPinned && (
+                                  {isMessagePinnedForUser(
+                                    message,
+                                    currentUser.id,
+                                  ) && (
                                     <Pin className="h-3.5 w-3.5 text-muted-foreground" />
                                   )}
                                   {message.isEdited &&
@@ -3386,7 +3423,7 @@ export function ChatWindow({
           </div>
 
           {isDeleteSelectionMode ? (
-            <div className="flex shrink-0 items-center gap-3 border-t bg-card px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
+            <div className="flex shrink-0 items-center gap-3 border-t bg-card/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
               <Button
                 variant="ghost"
                 size="icon"
@@ -3414,7 +3451,7 @@ export function ChatWindow({
             <>
               {/* Reply Preview */}
               {replyingTo && (
-                <div className="flex shrink-0 items-center gap-2 border-t bg-card px-4 py-2">
+                <div className="flex shrink-0 items-center gap-2 border-t bg-card/95 px-4 py-2">
                   <div className="flex-1 rounded border-l-2 border-primary bg-muted/50 px-3 py-2">
                     <span className="text-xs font-medium text-primary">
                       {getMessageSenderName(replyingTo)}
@@ -3435,7 +3472,7 @@ export function ChatWindow({
 
               {/* Input Area */}
               {isRecordingAudio ? (
-                <div className="flex shrink-0 items-center gap-3 border-t bg-card px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 md:px-4 md:pb-2">
+                <div className="flex shrink-0 items-center gap-3 border-t bg-card/95 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 md:px-4">
                   <Button
                     variant="ghost"
                     size="icon"
@@ -3512,7 +3549,7 @@ export function ChatWindow({
                   </Button>
                 </div>
               ) : (
-                <div className="flex shrink-0 items-end gap-2 border-t bg-card px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 md:px-4 md:pb-2">
+                <div className="flex shrink-0 items-end gap-2 border-t bg-card/95 px-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 md:px-4">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -3605,13 +3642,13 @@ export function ChatWindow({
                         handleSendMessage();
                       }
                     }}
-                    className="thin-gray-scrollbar h-10 max-h-[7.5rem] min-h-10 flex-1 resize-none bg-muted py-2 leading-5"
+                    className="thin-gray-scrollbar h-10 max-h-[7.5rem] min-h-10 flex-1 resize-none rounded-xl border-border/70 bg-background/85 px-3 py-2 leading-5 shadow-inner shadow-black/5 focus-visible:ring-primary/40"
                   />
 
                   {inputValue.trim() ? (
                     <Button
                       size="icon"
-                      className="mb-0.5 bg-primary text-primary-foreground hover:bg-primary/90"
+                      className="mb-0.5 rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
                       onClick={handleSendMessage}
                       aria-label="Enviar mensagem"
                     >

@@ -31,6 +31,12 @@ import {
 import { sectors, type Sector } from "@/lib/sectors"
 import { cn } from "@/lib/utils"
 
+const forceComboboxBelow = {
+  side: "none",
+  align: "shift",
+  fallbackAxisSide: "none",
+} as const
+
 export function ForgotPasswordForm({
   className,
   ...props
@@ -186,7 +192,7 @@ export function ForgotPasswordForm({
               className="w-full"
               showClear
             />
-            <ComboboxContent>
+            <ComboboxContent collisionAvoidance={forceComboboxBelow}>
               <ComboboxEmpty>Nenhum setor encontrado.</ComboboxEmpty>
               <ComboboxList>
                 {(sector: Sector) => (

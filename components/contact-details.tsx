@@ -55,6 +55,7 @@ import {
 import {
   getChatPresenceMeta,
   getChatPresenceStatus,
+  isMessageFavoriteForUser,
   type Contact,
   type DirectoryUser,
   type Message,
@@ -380,7 +381,11 @@ function FavoriteMessagesPanel({
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const favoriteMessages = messages
-    .filter((message) => isVisibleMessage(message) && message.isFavorite)
+    .filter(
+      (message) =>
+        isVisibleMessage(message) &&
+        isMessageFavoriteForUser(message, currentUser.id),
+    )
     .filter((message) =>
       normalizedSearchQuery
         ? getMessageSearchText(message).includes(normalizedSearchQuery)
