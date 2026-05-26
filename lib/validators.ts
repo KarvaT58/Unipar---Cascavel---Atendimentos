@@ -22,18 +22,19 @@ export function normalizeCpf(value: string) {
 
 export function normalizeAccessPhone(value: string) {
   const digits = onlyDigits(value)
-  const phoneWithoutCountryCode = digits.startsWith("5545")
-    ? digits.slice(2)
-    : digits
 
   if (
-    phoneWithoutCountryCode.length !== 11 ||
-    !phoneWithoutCountryCode.startsWith("45")
+    digits.startsWith("55") &&
+    (digits.length === 12 || digits.length === 13)
   ) {
     return null
   }
 
-  return phoneWithoutCountryCode
+  if (digits.length !== 10 && digits.length !== 11) {
+    return null
+  }
+
+  return digits
 }
 
 export function normalizeWhatsapp(value: string) {

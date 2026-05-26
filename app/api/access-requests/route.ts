@@ -40,7 +40,7 @@ export async function POST(request: Request) {
 
   if (!phoneDigits) {
     return NextResponse.json(
-      { message: "Informe o telefone com DDD 45 e 9 dígitos." },
+      { message: "Informe o telefone com DDD, sem o código +55." },
       { status: 400 }
     )
   }
@@ -228,6 +228,10 @@ function getDuplicateRequestMessage(
 }
 
 function formatPhoneForMessage(phone: string) {
+  if (phone.length === 10) {
+    return `${phone.slice(0, 2)} ${phone.slice(2, 6)}-${phone.slice(6)}`
+  }
+
   return `${phone.slice(0, 2)} ${phone.slice(2, 7)}-${phone.slice(7)}`
 }
 

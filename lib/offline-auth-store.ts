@@ -916,6 +916,10 @@ function getOfflineDuplicateUserMessage(
 }
 
 function formatPhoneForMessage(phone: string) {
+  if (phone.length === 10) {
+    return `${phone.slice(0, 2)} ${phone.slice(2, 6)}-${phone.slice(6)}`
+  }
+
   return `${phone.slice(0, 2)} ${phone.slice(2, 7)}-${phone.slice(7)}`
 }
 

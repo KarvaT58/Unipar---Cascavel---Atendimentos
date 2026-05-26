@@ -827,7 +827,7 @@ function UserFormModal({
               id="admin-user-phone"
               value={form.phone}
               onChange={(event) => updateField("phone", event.target.value)}
-              placeholder="45 99999-9999"
+              placeholder="DDD 99999-9999"
               inputMode="tel"
               required
             />

@@ -30,6 +30,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { sectors, type Sector } from "@/lib/sectors"
 import { cn } from "@/lib/utils"
+import { normalizeAccessPhone } from "@/lib/validators"
 
 export function SignupForm({
   className,
@@ -52,10 +53,7 @@ export function SignupForm({
     const cpf = String(formData.get("cpf") ?? "").trim()
     const confirmCpf = String(formData.get("confirmCpf") ?? "").trim()
     const acceptedTerms = formData.get("acceptTerms") === "on"
-    const phoneDigits = phone.replace(/\D/g, "")
-    const phoneDigitsWithoutCountryCode = phoneDigits.startsWith("5545")
-      ? phoneDigits.slice(2)
-      : phoneDigits
+    const phoneDigits = normalizeAccessPhone(phone)
     const cpfDigits = cpf.replace(/\D/g, "")
     const confirmCpfDigits = confirmCpf.replace(/\D/g, "")
 
@@ -82,7 +80,7 @@ export function SignupForm({
 
     if (!phone) {
       toast.warning("Informe seu telefone.", {
-        description: "Use um número com DDD 45 para nossa equipe retornar.",
+        description: "Use um número com DDD para nossa equipe retornar.",
       })
       return
     }
@@ -101,12 +99,9 @@ export function SignupForm({
       return
     }
 
-    if (
-      phoneDigitsWithoutCountryCode.length !== 11 ||
-      !phoneDigitsWithoutCountryCode.startsWith("45")
-    ) {
+    if (!phoneDigits) {
       toast.error("Telefone inválido.", {
-        description: "Informe o telefone com DDD 45 e 9 dígitos.",
+        description: "Informe o telefone com DDD, sem o código +55.",
       })
       return
     }
@@ -257,7 +252,7 @@ export function SignupForm({
             type="tel"
             inputMode="tel"
             autoComplete="tel"
-            placeholder="45 99999-9999"
+            placeholder="DDD 99999-9999"
             maxLength={18}
             required
             className="bg-background"
