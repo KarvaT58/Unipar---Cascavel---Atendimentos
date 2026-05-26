@@ -27,9 +27,13 @@ import type { Prisma } from "@/lib/generated/prisma/client"
 
 const STATE_KEY = "main"
 const DATABASE_RETRY_DELAY_MS = 30_000
+const STATE_TRANSACTION_MAX_WAIT_MS = 15_000
+const STATE_TRANSACTION_TIMEOUT_MS = 20_000
+const STATE_TRANSACTION_RETRY_DELAYS_MS = [250, 1_000, 2_500]
 
 let databaseFallbackUntil = 0
 let databaseFallbackLogged = false
+let stateSaveQueue: Promise<void> = Promise.resolve()
 
 export interface RealtimeEvent {
   id: number
@@ -53,6 +57,24 @@ type AuthUserRow = {
 
 function toJsonValue(state: AppState) {
   return JSON.parse(serializeAppState(state)) as Prisma.InputJsonValue
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function isTransactionStartTimeoutError(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return false
+  }
+
+  const errorRecord = error as Record<string, unknown>
+  const message = String(errorRecord.message ?? "").toLowerCase()
+
+  return (
+    errorRecord.code === "P2028" &&
+    message.includes("unable to start a transaction")
+  )
 }
 
 export async function readAppState(): Promise<AppStateEnvelope> {
@@ -113,46 +135,7 @@ export async function saveAppState(
   }
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      const currentDocument = await tx.appStateDocument.findUnique({
-        where: { key: STATE_KEY },
-      })
-      const stateToSave = currentDocument
-        ? mergeAppStates(normalizeAppState(currentDocument.data), state)
-        : state
-      const document = currentDocument
-        ? await tx.appStateDocument.update({
-            where: { key: STATE_KEY },
-            data: {
-              data: toJsonValue(stateToSave),
-              revision: { increment: BigInt(1) },
-            },
-          })
-        : await tx.appStateDocument.create({
-            data: {
-              key: STATE_KEY,
-              data: toJsonValue(stateToSave),
-              revision: BigInt(1),
-            },
-          })
-      const revision = Number(document.revision)
-
-      await tx.realtimeEvent.create({
-        data: {
-          clientId,
-          source,
-          payload: {
-            revision,
-            key: STATE_KEY,
-          },
-        },
-      })
-
-      return {
-        state: normalizeAppState(document.data),
-        revision,
-      }
-    })
+    const result = await saveAppStateInDatabase(state, clientId, source)
 
     return {
       ...result,
@@ -174,6 +157,96 @@ export async function saveAppState(
         databaseConnected: false,
       }))
   }
+}
+
+async function saveAppStateInDatabase(
+  state: AppState,
+  clientId: string,
+  source: string
+) {
+  return enqueueStateSave(() => saveAppStateInDatabaseNow(state, clientId, source))
+}
+
+function enqueueStateSave<T>(operation: () => Promise<T>) {
+  const result = stateSaveQueue.then(operation, operation)
+
+  stateSaveQueue = result.then(
+    () => undefined,
+    () => undefined
+  )
+
+  return result
+}
+
+async function saveAppStateInDatabaseNow(
+  state: AppState,
+  clientId: string,
+  source: string
+) {
+  for (
+    let attempt = 0;
+    attempt <= STATE_TRANSACTION_RETRY_DELAYS_MS.length;
+    attempt += 1
+  ) {
+    try {
+      return await prisma.$transaction(
+        async (tx) => {
+          const currentDocument = await tx.appStateDocument.findUnique({
+            where: { key: STATE_KEY },
+          })
+          const stateToSave = currentDocument
+            ? mergeAppStates(normalizeAppState(currentDocument.data), state)
+            : state
+          const document = currentDocument
+            ? await tx.appStateDocument.update({
+                where: { key: STATE_KEY },
+                data: {
+                  data: toJsonValue(stateToSave),
+                  revision: { increment: BigInt(1) },
+                },
+              })
+            : await tx.appStateDocument.create({
+                data: {
+                  key: STATE_KEY,
+                  data: toJsonValue(stateToSave),
+                  revision: BigInt(1),
+                },
+              })
+          const revision = Number(document.revision)
+
+          await tx.realtimeEvent.create({
+            data: {
+              clientId,
+              source,
+              payload: {
+                revision,
+                key: STATE_KEY,
+              },
+            },
+          })
+
+          return {
+            state: normalizeAppState(document.data),
+            revision,
+          }
+        },
+        {
+          maxWait: STATE_TRANSACTION_MAX_WAIT_MS,
+          timeout: STATE_TRANSACTION_TIMEOUT_MS,
+        }
+      )
+    } catch (error) {
+      const retryDelay = STATE_TRANSACTION_RETRY_DELAYS_MS[attempt]
+
+      if (!isTransactionStartTimeoutError(error) || retryDelay === undefined) {
+        throw error
+      }
+
+      await delay(retryDelay)
+    }
+  }
+
+  throw new Error("Nao foi possivel iniciar a transacao para salvar o estado.")
 }
 
 export async function readRealtimeEvents(afterId: number) {

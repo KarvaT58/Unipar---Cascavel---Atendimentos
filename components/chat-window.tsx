@@ -2378,9 +2378,9 @@ export function ChatWindow({
   };
 
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-background/95">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-background">
       {/* Header */}
-      <div className="flex h-16 shrink-0 items-center gap-3 border-b bg-card/95 px-2 shadow-sm md:px-4">
+      <div className="flex h-14 shrink-0 items-center gap-3 border-b bg-background px-2 md:px-3">
         <Button
           variant="ghost"
           size="icon"
@@ -2395,7 +2395,7 @@ export function ChatWindow({
           onClick={onShowContactDetails}
         >
           <div className="relative">
-            <Avatar className="h-10 w-10 ring-1 ring-border">
+            <Avatar className="h-9 w-9 ring-1 ring-border">
               <AvatarImage src={contact.avatar} alt={contact.name} />
               <AvatarFallback>
                 {contact.name.slice(0, 2).toUpperCase()}
@@ -2404,7 +2404,7 @@ export function ChatWindow({
             {!isGroup && (
               <span
                 className={cn(
-                  "absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-card",
+                  "absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background",
                   contactPresence.dotClassName,
                 )}
               />
@@ -3073,7 +3073,7 @@ export function ChatWindow({
           {/* Messages */}
           <div className="relative min-h-0 flex-1">
             <div
-              className="thin-gray-scrollbar h-full overflow-y-auto bg-background px-3 py-4 md:px-5"
+              className="thin-gray-scrollbar h-full overflow-y-auto bg-muted/20 px-3 py-4 md:px-5"
               ref={scrollRef}
               onScroll={handleMessagesScroll}
             >
@@ -3423,7 +3423,7 @@ export function ChatWindow({
           </div>
 
           {isDeleteSelectionMode ? (
-            <div className="flex shrink-0 items-center gap-3 border-t bg-card/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
+            <div className="flex shrink-0 items-center gap-3 border-t bg-background px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
               <Button
                 variant="ghost"
                 size="icon"
@@ -3451,7 +3451,7 @@ export function ChatWindow({
             <>
               {/* Reply Preview */}
               {replyingTo && (
-                <div className="flex shrink-0 items-center gap-2 border-t bg-card/95 px-4 py-2">
+                <div className="flex shrink-0 items-center gap-2 border-t bg-background px-4 py-2">
                   <div className="flex-1 rounded border-l-2 border-primary bg-muted/50 px-3 py-2">
                     <span className="text-xs font-medium text-primary">
                       {getMessageSenderName(replyingTo)}
@@ -3472,7 +3472,7 @@ export function ChatWindow({
 
               {/* Input Area */}
               {isRecordingAudio ? (
-                <div className="flex shrink-0 items-center gap-3 border-t bg-card/95 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 md:px-4">
+                <div className="flex shrink-0 items-center gap-3 border-t bg-background px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 md:px-4">
                   <Button
                     variant="ghost"
                     size="icon"
@@ -3549,7 +3549,7 @@ export function ChatWindow({
                   </Button>
                 </div>
               ) : (
-                <div className="flex shrink-0 items-end gap-2 border-t bg-card/95 px-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 md:px-4">
+                <div className="flex shrink-0 items-end gap-2 border-t bg-background px-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 md:px-4">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -3642,7 +3642,7 @@ export function ChatWindow({
                         handleSendMessage();
                       }
                     }}
-                    className="thin-gray-scrollbar h-10 max-h-[7.5rem] min-h-10 flex-1 resize-none rounded-xl border-border/70 bg-background/85 px-3 py-2 leading-5 shadow-inner shadow-black/5 focus-visible:ring-primary/40"
+                    className="thin-gray-scrollbar h-10 max-h-[7.5rem] min-h-10 flex-1 resize-none rounded-md bg-muted/35 px-3 py-2 leading-5 focus-visible:ring-primary/40"
                   />
 
                   {inputValue.trim() ? (

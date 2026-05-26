@@ -5707,7 +5707,7 @@ export function UniparWorkspace({
         className={cn(
           "flex h-full min-w-0 flex-1 overflow-hidden",
           (activeNav === "chat" || activeNav === "grupos") &&
-            "chat-green-theme rounded-xl border bg-card/40 shadow-sm",
+            "rounded-lg border border-border/80 bg-background shadow-sm",
         )}
       >
         {activeNav === "admin" && currentSessionUser?.isAdmin === true ? (
@@ -5742,7 +5742,7 @@ export function UniparWorkspace({
             {/* Conversation List */}
             <div
               className={cn(
-                "h-full w-full border-r bg-card/95 md:w-[340px] md:min-w-[300px] lg:w-[380px]",
+                "h-full w-full border-r bg-background md:w-[340px] md:min-w-[300px] lg:w-[380px]",
                 selectedContact ? "hidden md:block" : "block",
               )}
             >
@@ -5923,7 +5923,7 @@ export function UniparWorkspace({
           <>
             <div
               className={cn(
-                "h-full w-full border-r bg-card/95 md:w-[340px] md:min-w-[300px] lg:w-[380px]",
+                "h-full w-full border-r bg-background md:w-[340px] md:min-w-[300px] lg:w-[380px]",
                 selectedGroup ? "hidden md:block" : "block",
               )}
             >

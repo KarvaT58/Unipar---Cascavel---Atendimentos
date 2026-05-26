@@ -49,35 +49,13 @@
 }
 
 :root {
-  --chat-outgoing: oklch(0.88 0.08 155);
-  --chat-incoming: oklch(0.96 0 0);
+  --chat-outgoing: color-mix(in oklch, var(--primary) 12%, var(--background));
+  --chat-incoming: var(--card);
 }
 
 .dark {
-  --chat-outgoing: oklch(0.35 0.1 155);
-  --chat-incoming: oklch(0.22 0.01 250);
-}
-
-.chat-green-theme {
-  --primary: oklch(0.55 0.18 155);
-  --primary-foreground: oklch(1 0 0);
-  --accent: oklch(0.96 0 0);
-  --accent-foreground: oklch(0.1 0 0);
-  --ring: oklch(0.3 0 0);
-  --chart-1: oklch(0.55 0.18 155);
-  --chat-outgoing: oklch(0.88 0.08 155);
-  --chat-incoming: oklch(0.96 0 0);
-}
-
-.dark .chat-green-theme {
-  --primary: oklch(0.65 0.18 155);
-  --primary-foreground: oklch(0.12 0.01 250);
-  --accent: oklch(0.65 0.18 155);
-  --accent-foreground: oklch(0.12 0.01 250);
-  --ring: oklch(0.65 0.18 155);
-  --chart-1: oklch(0.65 0.18 155);
-  --chat-outgoing: oklch(0.35 0.1 155);
-  --chat-incoming: oklch(0.22 0.01 250);
+  --chat-outgoing: color-mix(in oklch, var(--primary) 24%, var(--card));
+  --chat-incoming: var(--card);
 }
 
 @theme inline {

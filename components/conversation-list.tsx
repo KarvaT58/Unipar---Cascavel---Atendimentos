@@ -417,16 +417,16 @@ export function ConversationList({
   };
 
   return (
-    <div className="flex h-full flex-col bg-card/95">
+    <div className="flex h-full flex-col bg-background">
       {/* Header */}
-      <div className="flex h-16 items-center justify-between border-b bg-card/95 px-4">
+      <div className="flex h-14 items-center justify-between border-b bg-background px-3">
         {showArchived ? (
           <>
             <Button variant="ghost" size="icon" onClick={onToggleArchived}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div className="min-w-0 text-center">
-              <h1 className="truncate text-lg font-semibold text-foreground">
+              <h1 className="truncate text-base font-semibold text-foreground">
                 Arquivadas
               </h1>
               <p className="text-xs text-muted-foreground">
@@ -446,7 +446,7 @@ export function ConversationList({
           <>
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-2">
-                <h1 className="truncate text-lg font-semibold text-foreground">
+                <h1 className="truncate text-base font-semibold text-foreground">
                   {title}
                 </h1>
                 {filteredContacts.length > 0 && (
@@ -461,10 +461,10 @@ export function ConversationList({
             </div>
             <Button
               size="icon"
-              className="h-9 w-9 rounded-lg bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+              className="h-8 w-8 rounded-md bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
               onClick={() => setIsNewConversationOpen(true)}
             >
-              <Plus className="h-5 w-5" />
+              <Plus className="h-4 w-4" />
               <span className="sr-only">
                 {createMode === "group" ? "Criar grupo" : "Nova conversa"}
               </span>
@@ -764,14 +764,14 @@ export function ConversationList({
       )}
 
       {/* Search */}
-      <div className="border-b bg-card/95 p-3">
+      <div className="border-b bg-muted/30 p-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder={searchPlaceholder}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-10 rounded-lg border-border/70 bg-background/80 pl-10 shadow-inner shadow-black/5 focus-visible:ring-primary/40"
+            className="h-9 rounded-md bg-background pl-10"
           />
         </div>
       </div>
@@ -780,9 +780,9 @@ export function ConversationList({
       {!showArchived && archivedCount > 0 && (
         <button
           onClick={onToggleArchived}
-          className="mx-2 mt-2 flex items-center gap-3 rounded-lg border border-border/60 bg-background/60 px-3 py-3 text-left transition-colors hover:bg-primary/5"
+          className="flex items-center gap-3 border-b bg-background px-3 py-3 text-left transition-colors hover:bg-muted/35"
         >
-          <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10">
+          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10">
             <Archive className="h-5 w-5 text-primary" />
           </div>
           <div className="flex flex-col">
@@ -806,14 +806,14 @@ export function ConversationList({
         className="thin-gray-scrollbar scrollbar-gutter-auto min-h-0 flex-1 overflow-y-auto"
         onScroll={handleContactListScroll}
       >
-        <div className="space-y-1 p-2">
+        <div className="divide-y">
           {visibleContacts.map((contact) => (
             <div
               key={contact.id}
               className={cn(
-                "group flex cursor-pointer select-none items-center gap-3 rounded-lg px-3 py-3 transition-[background-color,box-shadow,transform] hover:bg-muted/55",
+                "group flex cursor-pointer select-none items-center gap-3 px-3 py-3 transition-[background-color,box-shadow,transform] hover:bg-muted/35",
                 selectedContact?.id === contact.id &&
-                  "bg-primary/10 shadow-[inset_3px_0_0_var(--primary)]",
+                  "bg-primary/5 shadow-[inset_3px_0_0_var(--primary)]",
                 activeLongPressContactId === contact.id &&
                   (openContactMenuId === contact.id
                     ? "long-press-selected"
@@ -987,7 +987,7 @@ export function ConversationList({
           ))}
 
           {filteredContacts.length === 0 && (
-            <div className="mx-1 mt-5 flex flex-col items-center justify-center rounded-lg border border-dashed bg-background/50 px-4 py-10 text-center">
+            <div className="flex min-h-48 flex-col items-center justify-center px-4 py-10 text-center">
               <p className="text-muted-foreground">
                 {showArchived
                   ? `Nenhum ${conversationLabel} arquivado`
