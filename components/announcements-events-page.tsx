@@ -75,6 +75,7 @@ export interface AnnouncementEvent {
   title: string;
   description: string;
   scheduledAt: Date;
+  updatedAt?: Date;
   responsibleName?: string;
   creatorId: string;
   creatorName: string;
@@ -805,10 +806,12 @@ export function AnnouncementsEventsPage({
     }
 
     if (editingEvent) {
+      const updatedAt = new Date();
       const updatedEvent: AnnouncementEvent = {
         ...editingEvent,
         title,
         description,
+        updatedAt,
         responsibleName: responsibleName || undefined,
         scheduledAt,
         recipientIds: selectedRecipientIds,
@@ -819,10 +822,12 @@ export function AnnouncementsEventsPage({
       setSelectedEvent(updatedEvent);
       toast.success("Evento atualizado.");
     } else {
+      const createdAt = new Date();
       onCreateEvent({
-        id: `event-${Date.now()}`,
+        id: `event-${createdAt.getTime()}`,
         title,
         description,
+        updatedAt: createdAt,
         responsibleName: responsibleName || undefined,
         scheduledAt,
         creatorId: currentUserId,

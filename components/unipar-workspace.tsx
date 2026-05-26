@@ -1019,6 +1019,8 @@ export function UniparWorkspace({
   const [announcementEvents, setAnnouncementEvents] = useState<
     AnnouncementEvent[]
   >(EMPTY_APP_STATE.announcementEvents);
+  const [deletedAnnouncementEventIds, setDeletedAnnouncementEventIds] =
+    useState<string[]>(EMPTY_APP_STATE.deletedAnnouncementEventIds);
   const [focusedAnnouncementEventId, setFocusedAnnouncementEventId] = useState<
     string | null
   >(null);
@@ -1303,6 +1305,7 @@ export function UniparWorkspace({
       serviceTickets,
       loanRequests,
       announcementEvents,
+      deletedAnnouncementEventIds,
       kanbanColumns,
       kanbanCardsById,
       kanbanLabels,
@@ -1319,6 +1322,7 @@ export function UniparWorkspace({
       archivedContacts,
       archivedGroups,
       contacts,
+      deletedAnnouncementEventIds,
       extensionItems,
       groupMessagesByContact,
       groupMetadataById,
@@ -1396,6 +1400,7 @@ export function UniparWorkspace({
     setServiceTickets(nextState.serviceTickets);
     setLoanRequests(nextState.loanRequests);
     setAnnouncementEvents(nextState.announcementEvents);
+    setDeletedAnnouncementEventIds(nextState.deletedAnnouncementEventIds);
     setKanbanColumns(nextState.kanbanColumns);
     setKanbanCardsById(nextState.kanbanCardsById);
     setKanbanLabels(nextState.kanbanLabels);
@@ -4565,7 +4570,13 @@ export function UniparWorkspace({
   );
 
   const handleCreateAnnouncementEvent = (event: AnnouncementEvent) => {
-    setAnnouncementEvents((currentEvents) => [...currentEvents, event]);
+    setDeletedAnnouncementEventIds((currentIds) =>
+      currentIds.filter((currentId) => currentId !== event.id),
+    );
+    setAnnouncementEvents((currentEvents) => [
+      ...currentEvents.filter((currentEvent) => currentEvent.id !== event.id),
+      event,
+    ]);
   };
 
   const handleUpdateAnnouncementEvent = (event: AnnouncementEvent) => {
@@ -4580,6 +4591,9 @@ export function UniparWorkspace({
   };
 
   const handleDeleteAnnouncementEvent = (eventId: string) => {
+    setDeletedAnnouncementEventIds((currentIds) =>
+      currentIds.includes(eventId) ? currentIds : [...currentIds, eventId],
+    );
     setAnnouncementEvents((currentEvents) =>
       currentEvents.filter((event) => event.id !== eventId),
     );

@@ -57,6 +57,7 @@ export interface AppState {
   serviceTickets: ServiceTicket[];
   loanRequests: LoanRequest[];
   announcementEvents: AnnouncementEvent[];
+  deletedAnnouncementEventIds: string[];
   kanbanColumns: KanbanColumn[];
   kanbanCardsById: Record<string, KanbanCard>;
   kanbanLabels: KanbanLabel[];
@@ -86,6 +87,7 @@ export const EMPTY_APP_STATE: AppState = {
   serviceTickets: [],
   loanRequests: [],
   announcementEvents: [],
+  deletedAnnouncementEventIds: [],
   kanbanColumns: [],
   kanbanCardsById: {},
   kanbanLabels: [],
@@ -482,10 +484,68 @@ function mergeServiceTickets(
   );
 }
 
+function getAnnouncementEventFreshnessTime(event: AnnouncementEvent) {
+  return event.updatedAt?.getTime();
+}
+
+function getFreshestAnnouncementEvent(
+  storedEvent: AnnouncementEvent,
+  incomingEvent: AnnouncementEvent,
+) {
+  const storedUpdatedAt = getAnnouncementEventFreshnessTime(storedEvent);
+  const incomingUpdatedAt = getAnnouncementEventFreshnessTime(incomingEvent);
+
+  if (incomingUpdatedAt === undefined && storedUpdatedAt !== undefined) {
+    return storedEvent;
+  }
+
+  if (incomingUpdatedAt !== undefined && storedUpdatedAt !== undefined) {
+    return incomingUpdatedAt >= storedUpdatedAt ? incomingEvent : storedEvent;
+  }
+
+  return incomingEvent;
+}
+
+function mergeAnnouncementEvents(
+  storedEvents: AnnouncementEvent[],
+  incomingEvents: AnnouncementEvent[],
+  deletedEventIds: string[],
+) {
+  const deletedEventIdSet = new Set(deletedEventIds);
+  const eventsById = new Map<string, AnnouncementEvent>();
+
+  storedEvents.forEach((event) => {
+    if (!deletedEventIdSet.has(event.id)) {
+      eventsById.set(event.id, event);
+    }
+  });
+
+  incomingEvents.forEach((event) => {
+    if (deletedEventIdSet.has(event.id)) return;
+
+    const storedEvent = eventsById.get(event.id);
+    eventsById.set(
+      event.id,
+      storedEvent ? getFreshestAnnouncementEvent(storedEvent, event) : event,
+    );
+  });
+
+  return Array.from(eventsById.values()).sort(
+    (firstEvent, secondEvent) =>
+      firstEvent.scheduledAt.getTime() - secondEvent.scheduledAt.getTime() ||
+      firstEvent.id.localeCompare(secondEvent.id),
+  );
+}
+
 export function mergeAppStates(
   storedState: AppState,
   incomingState: AppState,
 ): AppState {
+  const deletedAnnouncementEventIds = mergeStringLists(
+    storedState.deletedAnnouncementEventIds,
+    incomingState.deletedAnnouncementEventIds,
+  );
+
   return {
     ...storedState,
     ...incomingState,
@@ -515,6 +575,12 @@ export function mergeAppStates(
       storedState.serviceTickets,
       incomingState.serviceTickets,
     ),
+    announcementEvents: mergeAnnouncementEvents(
+      storedState.announcementEvents,
+      incomingState.announcementEvents,
+      deletedAnnouncementEventIds,
+    ),
+    deletedAnnouncementEventIds,
     typingIndicators: mergeTypingIndicators(
       storedState.typingIndicators,
       incomingState.typingIndicators,
