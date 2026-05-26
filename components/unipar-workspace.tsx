@@ -2099,6 +2099,24 @@ export function UniparWorkspace({
       (!contact.ownerId || contact.ownerId === currentAnnouncementUser.id),
     [currentAnnouncementUser.id],
   );
+  const upsertDirectContactForCurrentUser = useCallback(
+    (currentContacts: Contact[], contact: Contact) => [
+      contact,
+      ...currentContacts.filter(
+        (currentContact) =>
+          !isStoredDirectContactForCurrentUser(currentContact, contact.id),
+      ),
+    ],
+    [isStoredDirectContactForCurrentUser],
+  );
+  const toOwnedDirectContact = useCallback(
+    (contact: Contact, updates: Partial<Contact> = {}): Contact => ({
+      ...contact,
+      ...updates,
+      ownerId: currentAnnouncementUser.id,
+    }),
+    [currentAnnouncementUser.id],
+  );
   const notificationMessageSnapshot = useMemo(() => {
     if (!currentAnnouncementUser.id) {
       return {
@@ -3208,178 +3226,103 @@ export function UniparWorkspace({
   };
 
   const handleArchiveContact = (contactId: string) => {
-    const contact =
-      displayContacts.find((currentContact) => currentContact.id === contactId) ??
-      contacts.find((currentContact) =>
-        isStoredDirectContactForCurrentUser(currentContact, contactId),
-      );
-    if (contact) {
-      const archivedContact = {
-        ...contact,
-        ownerId: currentAnnouncementUser.id,
-        isArchived: true,
-      };
+    if (!currentAnnouncementUser.id) return;
 
-      setContacts(
-        contacts.filter(
-          (currentContact) =>
-            !isStoredDirectContactForCurrentUser(currentContact, contactId),
-        ),
-      );
-      setArchivedContacts([
-        archivedContact,
-        ...archivedContacts.filter(
-          (currentContact) =>
-            !isStoredDirectContactForCurrentUser(currentContact, contactId),
-        ),
-      ]);
-      if (selectedContact?.id === contactId) {
-        setSelectedContact(null);
-      }
-      toast.success("Conversa arquivada.");
+    const contact = findConversationContact(contactId);
+
+    if (!contact) return;
+
+    const archivedContact = toOwnedDirectContact(contact, {
+      isArchived: true,
+    });
+
+    setContacts((currentContacts) =>
+      upsertDirectContactForCurrentUser(currentContacts, archivedContact),
+    );
+    setArchivedContacts((currentContacts) =>
+      upsertDirectContactForCurrentUser(currentContacts, archivedContact),
+    );
+    if (selectedContact?.id === contactId) {
+      setSelectedContact(null);
     }
+    toast.success("Conversa arquivada.");
   };
 
   const handleUnarchiveContact = (contactId: string) => {
-    const contact = archivedContacts.find((currentContact) =>
-      isStoredDirectContactForCurrentUser(currentContact, contactId),
-    );
-    if (contact) {
-      const restoredContact = {
-        ...contact,
-        ownerId: currentAnnouncementUser.id,
-        isArchived: false,
-      };
+    if (!currentAnnouncementUser.id) return;
 
-      setArchivedContacts(
-        archivedContacts.filter(
-          (currentContact) =>
-            !isStoredDirectContactForCurrentUser(currentContact, contactId),
-        ),
-      );
-      setContacts([
-        restoredContact,
-        ...contacts.filter(
-          (currentContact) =>
-            !isStoredDirectContactForCurrentUser(currentContact, contactId),
-        ),
-      ]);
-      toast.success("Conversa desarquivada.");
-    }
+    const contact = findConversationContact(contactId);
+
+    if (!contact) return;
+
+    const restoredContact = toOwnedDirectContact(contact, {
+      isArchived: false,
+    });
+
+    setContacts((currentContacts) =>
+      upsertDirectContactForCurrentUser(currentContacts, restoredContact),
+    );
+    setArchivedContacts((currentContacts) =>
+      upsertDirectContactForCurrentUser(currentContacts, restoredContact),
+    );
+    toast.success("Conversa desarquivada.");
   };
 
   const handleMuteContact = (contactId: string) => {
-    const contact =
-      selectedContact?.id === contactId
-        ? selectedContact
-        : contacts.find((currentContact) =>
-            isStoredDirectContactForCurrentUser(currentContact, contactId),
-          ) ??
-          archivedContacts.find((currentContact) =>
-            isStoredDirectContactForCurrentUser(currentContact, contactId),
-          );
-    const willMute = !(contact?.isMuted ?? false);
+    if (!currentAnnouncementUser.id) return;
 
-    setContacts(
-      contacts.map((c) =>
-        isStoredDirectContactForCurrentUser(c, contactId)
-          ? { ...c, isMuted: !c.isMuted }
-          : c,
-      ),
+    const contact = findConversationContact(contactId);
+
+    if (!contact) return;
+
+    const willMute = !(contact?.isMuted ?? false);
+    const mutedContact = toOwnedDirectContact(contact, {
+      isMuted: willMute,
+    });
+
+    setContacts((currentContacts) =>
+      upsertDirectContactForCurrentUser(currentContacts, mutedContact),
     );
     setArchivedContacts((currentContacts) =>
-      currentContacts.map((currentContact) =>
-        isStoredDirectContactForCurrentUser(currentContact, contactId)
-          ? { ...currentContact, isMuted: !currentContact.isMuted }
-          : currentContact,
-      ),
-    );
-    if (
-      contact &&
-      !contacts.some((currentContact) =>
-        isStoredDirectContactForCurrentUser(currentContact, contactId),
-      ) &&
-      !archivedContacts.some((currentContact) =>
+      currentContacts.some((currentContact) =>
         isStoredDirectContactForCurrentUser(currentContact, contactId),
       )
-    ) {
-      const ownedContact = {
-        ...contact,
-        ownerId: currentAnnouncementUser.id,
-        isMuted: willMute,
-      };
-
-      if (contact.isArchived) {
-        setArchivedContacts((currentContacts) => [
-          ownedContact,
-          ...currentContacts,
-        ]);
-      } else {
-        setContacts((currentContacts) => [ownedContact, ...currentContacts]);
-      }
-    }
-    if (selectedContact?.id === contactId) {
-      setSelectedContact({
-        ...selectedContact,
-        isMuted: !selectedContact.isMuted,
-      });
-    }
+        ? upsertDirectContactForCurrentUser(currentContacts, mutedContact)
+        : currentContacts,
+    );
+    setSelectedContact((currentContact) =>
+      currentContact?.id === contactId
+        ? { ...currentContact, isMuted: willMute }
+        : currentContact,
+    );
     toast.success(willMute ? "Conversa silenciada." : "Conversa reativada.");
   };
 
   const handlePinContact = (contactId: string) => {
-    const contact =
-      selectedContact?.id === contactId
-        ? selectedContact
-        : contacts.find((currentContact) =>
-            isStoredDirectContactForCurrentUser(currentContact, contactId),
-          ) ??
-          archivedContacts.find((currentContact) =>
-            isStoredDirectContactForCurrentUser(currentContact, contactId),
-          );
+    if (!currentAnnouncementUser.id) return;
+
+    const contact = findConversationContact(contactId);
+
+    if (!contact) return;
+
     const willPin = !(contact?.isPinned ?? false);
+    const pinnedContact = toOwnedDirectContact(contact, {
+      isPinned: willPin,
+    });
 
     setContacts((currentContacts) =>
-      currentContacts.map((contact) =>
-        isStoredDirectContactForCurrentUser(contact, contactId)
-          ? { ...contact, isPinned: !contact.isPinned }
-          : contact,
-      ),
+      upsertDirectContactForCurrentUser(currentContacts, pinnedContact),
     );
     setArchivedContacts((currentContacts) =>
-      currentContacts.map((contact) =>
-        isStoredDirectContactForCurrentUser(contact, contactId)
-          ? { ...contact, isPinned: !contact.isPinned }
-          : contact,
-      ),
-    );
-    if (
-      contact &&
-      !contacts.some((currentContact) =>
-        isStoredDirectContactForCurrentUser(currentContact, contactId),
-      ) &&
-      !archivedContacts.some((currentContact) =>
+      currentContacts.some((currentContact) =>
         isStoredDirectContactForCurrentUser(currentContact, contactId),
       )
-    ) {
-      const ownedContact = {
-        ...contact,
-        ownerId: currentAnnouncementUser.id,
-        isPinned: willPin,
-      };
-
-      if (contact.isArchived) {
-        setArchivedContacts((currentContacts) => [
-          ownedContact,
-          ...currentContacts,
-        ]);
-      } else {
-        setContacts((currentContacts) => [ownedContact, ...currentContacts]);
-      }
-    }
+        ? upsertDirectContactForCurrentUser(currentContacts, pinnedContact)
+        : currentContacts,
+    );
     setSelectedContact((currentContact) =>
       currentContact?.id === contactId
-        ? { ...currentContact, isPinned: !currentContact.isPinned }
+        ? { ...currentContact, isPinned: willPin }
         : currentContact,
     );
     toast.success(willPin ? "Conversa fixada." : "Conversa desfixada.");
@@ -3415,6 +3358,8 @@ export function UniparWorkspace({
   };
 
   const executeClearConversation = (contactId: string) => {
+    const contact = findConversationContact(contactId);
+
     setMessagesByContact((currentMessagesByContact) => {
       if (
         !currentAnnouncementUser.id ||
@@ -3450,6 +3395,25 @@ export function UniparWorkspace({
       messagesByContactRef.current = nextMessagesByContact;
       return nextMessagesByContact;
     });
+    if (contact && currentAnnouncementUser.id) {
+      const clearedContact = toOwnedDirectContact(contact, {
+        lastMessage: "Conversa limpa",
+        lastMessageIsOwn: undefined,
+        lastMessageStatus: undefined,
+        unreadCount: 0,
+      });
+
+      setContacts((currentContacts) =>
+        upsertDirectContactForCurrentUser(currentContacts, clearedContact),
+      );
+      setArchivedContacts((currentContacts) =>
+        currentContacts.some((currentContact) =>
+          isStoredDirectContactForCurrentUser(currentContact, contactId),
+        )
+          ? upsertDirectContactForCurrentUser(currentContacts, clearedContact)
+          : currentContacts,
+      );
+    }
     setContacts((currentContacts) =>
       currentContacts.map((contact) =>
         isStoredDirectContactForCurrentUser(contact, contactId)
@@ -3493,20 +3457,50 @@ export function UniparWorkspace({
     if (!currentAnnouncementUser.id) return;
 
     const currentUserId = currentAnnouncementUser.id;
+    const contact = findConversationContact(contactId);
+    const hiddenContact = contact
+      ? hideConversationForUser(
+          toOwnedDirectContact(contact, {
+            isArchived: false,
+            unreadCount: 0,
+          }),
+          currentUserId,
+        )
+      : null;
 
     setContacts((currentContacts) =>
-      currentContacts.map((contact) =>
-        isStoredDirectContactForCurrentUser(contact, contactId)
-          ? hideConversationForUser(contact, currentUserId)
-          : contact,
-      ),
+      hiddenContact
+        ? upsertDirectContactForCurrentUser(
+            currentContacts.map((contact) =>
+              isStoredDirectContactForCurrentUser(contact, contactId)
+                ? hideConversationForUser(contact, currentUserId)
+                : contact,
+            ),
+            hiddenContact,
+          )
+        : currentContacts.map((contact) =>
+            isStoredDirectContactForCurrentUser(contact, contactId)
+              ? hideConversationForUser(contact, currentUserId)
+              : contact,
+          ),
     );
     setArchivedContacts((currentContacts) =>
-      currentContacts.map((contact) =>
-        isStoredDirectContactForCurrentUser(contact, contactId)
-          ? hideConversationForUser(contact, currentUserId)
-          : contact,
-      ),
+      currentContacts.some((contact) =>
+        isStoredDirectContactForCurrentUser(contact, contactId),
+      ) && hiddenContact
+        ? upsertDirectContactForCurrentUser(
+            currentContacts.map((contact) =>
+              isStoredDirectContactForCurrentUser(contact, contactId)
+                ? hideConversationForUser(contact, currentUserId)
+                : contact,
+            ),
+            hiddenContact,
+          )
+        : currentContacts.map((contact) =>
+            isStoredDirectContactForCurrentUser(contact, contactId)
+              ? hideConversationForUser(contact, currentUserId)
+              : contact,
+          ),
     );
     setMessagesByContact((currentMessagesByContact) => {
       const nextMessagesByContact = { ...currentMessagesByContact };
