@@ -240,12 +240,14 @@ function getMediaThumbSource(message: Message) {
 
 function MediaToolbarButton({
   active,
+  className,
   disabled,
   icon: Icon,
   label,
   onClick,
 }: {
   active?: boolean;
+  className?: string;
   disabled?: boolean;
   icon: ComponentType<{ className?: string }>;
   label: string;
@@ -258,15 +260,16 @@ function MediaToolbarButton({
           variant="ghost"
           size="icon"
           className={cn(
-            "h-10 w-10 rounded-full text-white hover:bg-white/10 hover:text-white",
+            "h-9 w-9 rounded-full text-white hover:bg-white/10 hover:text-white sm:h-10 sm:w-10",
             active && "bg-white/15",
             disabled && "pointer-events-none opacity-25",
+            className,
           )}
           disabled={disabled}
           onClick={onClick}
           aria-label={label}
         >
-          <Icon className="h-5 w-5" />
+          <Icon className="h-[18px] w-[18px] sm:h-5 sm:w-5" />
         </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom">{label}</TooltipContent>
@@ -2868,9 +2871,9 @@ export function ChatWindow({
           mediaViewerAttachment?.type === "video") && (
           <TooltipProvider>
             <div className="fixed inset-0 z-[80] flex flex-col bg-[#111312] text-white">
-              <div className="relative z-20 flex h-16 shrink-0 items-center justify-between gap-4 bg-[#111312]/95 px-4 md:px-8">
-                <div className="flex min-w-0 items-center gap-3">
-                  <Avatar className="h-10 w-10">
+              <div className="relative z-20 flex h-14 shrink-0 items-center gap-2 bg-[#111312]/95 px-2 sm:h-16 sm:gap-4 sm:px-4 md:px-8">
+                <div className="flex min-w-0 shrink-0 items-center gap-3">
+                  <Avatar className="h-9 w-9 sm:h-10 sm:w-10">
                     <AvatarImage
                       src={getMessageSenderAvatar(mediaViewerMessage)}
                       alt={getMessageSenderName(mediaViewerMessage)}
@@ -2881,7 +2884,7 @@ export function ChatWindow({
                         .toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="min-w-0">
+                  <div className="hidden min-w-0 sm:block">
                     <div className="truncate text-sm font-semibold">
                       {getMessageSenderName(mediaViewerMessage)}
                     </div>
@@ -2892,76 +2895,85 @@ export function ChatWindow({
                   </div>
                 </div>
 
-                <div className="flex shrink-0 items-center gap-1">
-                  <MediaToolbarButton disabled icon={Search} label="Buscar" />
+                <div className="flex min-w-0 flex-1 items-center justify-end gap-1">
+                  <div className="no-scrollbar flex min-w-0 items-center gap-0.5 overflow-x-auto overscroll-x-contain">
+                    <MediaToolbarButton disabled icon={Search} label="Buscar" />
+                    <MediaToolbarButton
+                      icon={ZoomOut}
+                      label="Menos zoom"
+                      onClick={() =>
+                        setMediaZoom((zoom) => Math.max(0.7, zoom - 0.25))
+                      }
+                    />
+                    <MediaToolbarButton
+                      icon={ZoomIn}
+                      label="Mais zoom"
+                      onClick={() =>
+                        setMediaZoom((zoom) => Math.min(2.5, zoom + 0.25))
+                      }
+                    />
+                    <MediaToolbarButton
+                      icon={PanelTop}
+                      label="Detalhes"
+                      onClick={onShowContactDetails}
+                    />
+                    <MediaToolbarButton
+                      icon={Reply}
+                      label="Responder"
+                      onClick={() =>
+                        handleReplyFromMediaViewer(mediaViewerMessage)
+                      }
+                    />
+                    <MediaToolbarButton
+                      active={isMessageFavoriteForUser(
+                        mediaViewerMessage,
+                        currentUser.id,
+                      )}
+                      icon={Star}
+                      label={
+                        isMessageFavoriteForUser(
+                          mediaViewerMessage,
+                          currentUser.id,
+                        )
+                          ? "Desfavoritar"
+                          : "Favoritar"
+                      }
+                      onClick={() =>
+                        handleToggleFavoriteMessage(mediaViewerMessage)
+                      }
+                    />
+                    <MediaToolbarButton
+                      active={isMessagePinnedForUser(
+                        mediaViewerMessage,
+                        currentUser.id,
+                      )}
+                      disabled={mediaViewerPinDisabled}
+                      icon={Pin}
+                      label={
+                        isMessagePinnedForUser(
+                          mediaViewerMessage,
+                          currentUser.id,
+                        )
+                          ? "Desfixar"
+                          : "Fixar"
+                      }
+                      onClick={() => handleTogglePinMessage(mediaViewerMessage)}
+                    />
+                    <MediaToolbarButton
+                      icon={Forward}
+                      label="Encaminhar"
+                      onClick={() =>
+                        handleForwardFromMediaViewer(mediaViewerMessage)
+                      }
+                    />
+                    <MediaToolbarButton
+                      icon={Download}
+                      label="Baixar"
+                      onClick={() => handleDownloadMedia(mediaViewerMessage)}
+                    />
+                  </div>
                   <MediaToolbarButton
-                    icon={ZoomOut}
-                    label="Menos zoom"
-                    onClick={() =>
-                      setMediaZoom((zoom) => Math.max(0.7, zoom - 0.25))
-                    }
-                  />
-                  <MediaToolbarButton
-                    icon={ZoomIn}
-                    label="Mais zoom"
-                    onClick={() =>
-                      setMediaZoom((zoom) => Math.min(2.5, zoom + 0.25))
-                    }
-                  />
-                  <MediaToolbarButton
-                    icon={PanelTop}
-                    label="Detalhes"
-                    onClick={onShowContactDetails}
-                  />
-                  <MediaToolbarButton
-                    icon={Reply}
-                    label="Responder"
-                    onClick={() =>
-                      handleReplyFromMediaViewer(mediaViewerMessage)
-                    }
-                  />
-                  <MediaToolbarButton
-                    active={isMessageFavoriteForUser(
-                      mediaViewerMessage,
-                      currentUser.id,
-                    )}
-                    icon={Star}
-                    label={
-                      isMessageFavoriteForUser(mediaViewerMessage, currentUser.id)
-                        ? "Desfavoritar"
-                        : "Favoritar"
-                    }
-                    onClick={() =>
-                      handleToggleFavoriteMessage(mediaViewerMessage)
-                    }
-                  />
-                  <MediaToolbarButton
-                    active={isMessagePinnedForUser(
-                      mediaViewerMessage,
-                      currentUser.id,
-                    )}
-                    disabled={mediaViewerPinDisabled}
-                    icon={Pin}
-                    label={
-                      isMessagePinnedForUser(mediaViewerMessage, currentUser.id)
-                        ? "Desfixar"
-                        : "Fixar"
-                    }
-                    onClick={() => handleTogglePinMessage(mediaViewerMessage)}
-                  />
-                  <MediaToolbarButton
-                    icon={Forward}
-                    label="Encaminhar"
-                    onClick={() =>
-                      handleForwardFromMediaViewer(mediaViewerMessage)
-                    }
-                  />
-                  <MediaToolbarButton
-                    icon={Download}
-                    label="Baixar"
-                    onClick={() => handleDownloadMedia(mediaViewerMessage)}
-                  />
-                  <MediaToolbarButton
+                    className="shrink-0"
                     icon={X}
                     label="Fechar"
                     onClick={handleCloseMediaViewer}
@@ -2969,44 +2981,44 @@ export function ChatWindow({
                 </div>
               </div>
 
-              <div className="relative z-10 flex min-h-0 flex-1 items-center justify-center overflow-hidden px-16 py-4">
+              <div className="relative z-10 flex min-h-0 flex-1 items-center justify-center overflow-hidden px-3 py-2 sm:px-8 sm:py-4 md:px-16">
                 {mediaMessages.length > 1 && (
                   <>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="absolute left-5 top-1/2 z-20 h-12 w-12 -translate-y-1/2 rounded-full bg-black/20 text-white hover:bg-white/10 hover:text-white"
+                      className="absolute left-2 top-1/2 z-20 h-10 w-10 -translate-y-1/2 rounded-full bg-black/20 text-white hover:bg-white/10 hover:text-white sm:left-5 sm:h-12 sm:w-12"
                       onClick={() => handleNavigateMediaViewer(-1)}
                       aria-label="Mídia anterior"
                     >
-                      <ChevronDown className="h-6 w-6 rotate-90" />
+                      <ChevronDown className="h-5 w-5 rotate-90 sm:h-6 sm:w-6" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="absolute right-5 top-1/2 z-20 h-12 w-12 -translate-y-1/2 rounded-full bg-black/20 text-white hover:bg-white/10 hover:text-white"
+                      className="absolute right-2 top-1/2 z-20 h-10 w-10 -translate-y-1/2 rounded-full bg-black/20 text-white hover:bg-white/10 hover:text-white sm:right-5 sm:h-12 sm:w-12"
                       onClick={() => handleNavigateMediaViewer(1)}
                       aria-label="Próxima mídia"
                     >
-                      <ChevronDown className="h-6 w-6 -rotate-90" />
+                      <ChevronDown className="h-5 w-5 -rotate-90 sm:h-6 sm:w-6" />
                     </Button>
                   </>
                 )}
 
                 {mediaViewerAttachment.type === "image" ? (
-                  <div
-                    aria-label={mediaViewerAttachment.alt}
-                    className="h-full max-h-[calc(100dvh-13rem)] w-full max-w-5xl bg-contain bg-center bg-no-repeat transition-transform"
-                    role="img"
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    alt={mediaViewerAttachment.alt}
+                    className="max-h-full max-w-full object-contain transition-transform"
+                    src={mediaViewerAttachment.src}
                     style={{
-                      backgroundImage: `url(${mediaViewerAttachment.src})`,
                       transform: `scale(${mediaZoom})`,
                     }}
                   />
                 ) : (
                   <video
                     controls
-                    className="max-h-[calc(100dvh-13rem)] max-w-full rounded bg-black transition-transform"
+                    className="max-h-full max-w-full rounded bg-black transition-transform"
                     src={
                       mediaViewerAttachment.src ??
                       mediaViewerAttachment.thumbnail
@@ -3016,51 +3028,55 @@ export function ChatWindow({
                 )}
 
                 {mediaViewerMessage.content && (
-                  <div className="absolute bottom-3 left-1/2 z-20 max-w-xl -translate-x-1/2 rounded-full bg-black/35 px-4 py-2 text-center text-sm text-white/80">
+                  <div className="absolute bottom-2 left-1/2 z-20 max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-full bg-black/35 px-4 py-2 text-center text-sm text-white/80 sm:bottom-3 sm:max-w-xl">
                     {mediaViewerMessage.content}
                   </div>
                 )}
               </div>
 
-              <div className="thin-gray-scrollbar flex h-24 shrink-0 items-center gap-2 overflow-x-auto border-t border-white/10 px-4 py-2">
-                {mediaMessages.map((message) => {
-                  const attachment = message.attachment;
-                  const thumbSource = getMediaThumbSource(message);
-                  const isActive = message.id === mediaViewerMessage.id;
+              {mediaMessages.length > 1 && (
+                <div className="thin-gray-scrollbar flex h-20 shrink-0 items-center gap-2 overflow-x-auto border-t border-white/10 px-3 py-2 sm:h-24 sm:px-4">
+                  {mediaMessages.map((message) => {
+                    const attachment = message.attachment;
+                    const thumbSource = getMediaThumbSource(message);
+                    const isActive = message.id === mediaViewerMessage.id;
 
-                  if (
-                    attachment?.type !== "image" &&
-                    attachment?.type !== "video"
-                  ) {
-                    return null;
-                  }
+                    if (
+                      attachment?.type !== "image" &&
+                      attachment?.type !== "video"
+                    ) {
+                      return null;
+                    }
 
-                  return (
-                    <button
-                      key={`media-thumb-${message.id}`}
-                      type="button"
-                      className={cn(
-                        "relative h-16 w-16 shrink-0 overflow-hidden rounded border-2 bg-white/10 transition-colors",
-                        isActive ? "border-primary" : "border-transparent",
-                      )}
-                      onClick={() => handleSelectMediaViewerMessage(message.id)}
-                      aria-label={`Abrir ${getMessageSnippet(message)}`}
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="block h-full w-full bg-cover bg-center"
-                        style={{ backgroundImage: `url(${thumbSource})` }}
-                      />
-                      {attachment.type === "video" && (
-                        <span className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/70 px-1 text-[10px] font-medium text-white">
-                          <Play className="h-2.5 w-2.5 fill-white" />
-                          {attachment.duration}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+                    return (
+                      <button
+                        key={`media-thumb-${message.id}`}
+                        type="button"
+                        className={cn(
+                          "relative h-14 w-14 shrink-0 overflow-hidden rounded border-2 bg-white/10 transition-colors sm:h-16 sm:w-16",
+                          isActive ? "border-primary" : "border-transparent",
+                        )}
+                        onClick={() =>
+                          handleSelectMediaViewerMessage(message.id)
+                        }
+                        aria-label={`Abrir ${getMessageSnippet(message)}`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="block h-full w-full bg-cover bg-center"
+                          style={{ backgroundImage: `url(${thumbSource})` }}
+                        />
+                        {attachment.type === "video" && (
+                          <span className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/70 px-1 text-[10px] font-medium text-white">
+                            <Play className="h-2.5 w-2.5 fill-white" />
+                            {attachment.duration}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </TooltipProvider>
         )}
