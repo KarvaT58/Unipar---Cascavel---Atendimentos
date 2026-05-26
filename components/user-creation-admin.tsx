@@ -115,7 +115,9 @@ const emptyForm: FormState = {
   isAdmin: false,
 }
 
-const userPageSize = 8
+const minUserPageSize = 8
+const userTableHeaderHeight = 34
+const userTableRowHeight = 60
 const accessRequestSoundPath = "/sound/notifica%C3%A7%C3%A3o.mp3"
 
 export function UserCreationAdmin({
@@ -133,6 +135,7 @@ export function UserCreationAdmin({
   const [visibleUsers, setVisibleUsers] = React.useState(users)
   const [search, setSearch] = React.useState("")
   const [page, setPage] = React.useState(1)
+  const [userPageSize, setUserPageSize] = React.useState(minUserPageSize)
   const [modal, setModal] = React.useState<UserModal | null>(null)
   const [form, setForm] = React.useState<FormState>(emptyForm)
   const [confirmDialog, setConfirmDialog] =
@@ -143,6 +146,7 @@ export function UserCreationAdmin({
     new Set(requests.map((request) => request.id))
   )
   const notificationAudioRef = React.useRef<HTMLAudioElement | null>(null)
+  const userTableViewportRef = React.useRef<HTMLDivElement | null>(null)
 
   React.useEffect(() => {
     notificationAudioRef.current = new Audio(accessRequestSoundPath)
@@ -198,6 +202,34 @@ export function UserCreationAdmin({
     return () => {
       eventSource.close()
     }
+  }, [])
+
+  React.useEffect(() => {
+    const viewport = userTableViewportRef.current
+
+    if (!viewport || typeof ResizeObserver === "undefined") {
+      return
+    }
+
+    const updatePageSize = () => {
+      const nextPageSize = Math.max(
+        minUserPageSize,
+        Math.floor(
+          (viewport.clientHeight - userTableHeaderHeight) / userTableRowHeight
+        )
+      )
+
+      setUserPageSize((currentPageSize) =>
+        currentPageSize === nextPageSize ? currentPageSize : nextPageSize
+      )
+    }
+
+    updatePageSize()
+
+    const observer = new ResizeObserver(updatePageSize)
+    observer.observe(viewport)
+
+    return () => observer.disconnect()
   }, [])
 
   const filteredUsers = React.useMemo(() => {
@@ -478,7 +510,10 @@ export function UserCreationAdmin({
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div
+            ref={userTableViewportRef}
+            className="min-h-0 flex-1 overflow-auto"
+          >
             {paginatedUsers.length ? (
               <div className="min-w-[900px]">
                 <div className="grid grid-cols-[1.05fr_1.3fr_0.9fr_0.75fr_0.7fr_0.85fr_42px] gap-2 border-b bg-muted/30 px-3 py-2 text-xs font-semibold uppercase text-muted-foreground">
