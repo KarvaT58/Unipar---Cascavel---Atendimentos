@@ -61,6 +61,12 @@ type AuthUserRow = {
   } | null
 }
 
+type DatabaseSaveResult = {
+  state: AppState
+  revision: number
+  hydrateAuthUsers?: boolean
+}
+
 function toJsonValue(state: AppState) {
   return JSON.parse(serializeAppState(state)) as Prisma.InputJsonValue
 }
@@ -195,7 +201,10 @@ export async function saveAppState(
 
     return {
       ...result,
-      state: await hydrateAppStateAuthUsers(result.state),
+      state:
+        result.hydrateAuthUsers === false
+          ? result.state
+          : await hydrateAppStateAuthUsers(result.state),
       databaseConnected: true,
     }
   } catch (error) {
@@ -238,7 +247,7 @@ async function saveAppStateInDatabaseNow(
   state: AppState,
   clientId: string,
   source: string
-) {
+): Promise<DatabaseSaveResult> {
   for (
     let attempt = 0;
     attempt <= STATE_TRANSACTION_RETRY_DELAYS_MS.length;
@@ -258,11 +267,9 @@ async function saveAppStateInDatabaseNow(
           if (currentDocument && currentState) {
             if (!hasPersistentStateChange(currentState, state)) {
               return {
-                state: {
-                  ...currentState,
-                  typingIndicators: state.typingIndicators,
-                },
+                state,
                 revision: Number(currentDocument.revision),
+                hydrateAuthUsers: false,
               }
             }
           }
@@ -280,11 +287,9 @@ async function saveAppStateInDatabaseNow(
             !hasPersistentStateChange(currentState, stateToSave)
           ) {
             return {
-              state: {
-                ...currentState,
-                typingIndicators: state.typingIndicators,
-              },
+              state,
               revision: Number(currentDocument.revision),
+              hydrateAuthUsers: false,
             }
           }
 
