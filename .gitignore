@@ -24,6 +24,7 @@
 .DS_Store
 *.pem
 .local-data/
+/backups/
 
 # debug
 npm-debug.log*

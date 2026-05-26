@@ -103,6 +103,7 @@ import {
   getUploadSizeLimitMessage,
   splitFilesByUploadSize,
 } from "@/lib/upload-limits";
+import { uploadFileAttachment } from "@/lib/upload-client";
 import { toast } from "sonner";
 
 export type ForwardTarget = {
@@ -338,28 +339,6 @@ function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function readFileAsDataUrl(file: File) {
-  return new Promise<string | null>((resolve) => {
-    const reader = new FileReader();
-
-    reader.onload = () =>
-      resolve(typeof reader.result === "string" ? reader.result : null);
-    reader.onerror = () => resolve(null);
-    reader.readAsDataURL(file);
-  });
-}
-
-function readBlobAsDataUrl(blob: Blob) {
-  return new Promise<string | undefined>((resolve) => {
-    const reader = new FileReader();
-
-    reader.onload = () =>
-      resolve(typeof reader.result === "string" ? reader.result : undefined);
-    reader.onerror = () => resolve(undefined);
-    reader.readAsDataURL(blob);
-  });
-}
-
 function createMessageId(userId: string) {
   const randomValue =
     typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
@@ -380,18 +359,19 @@ function formatRecordingTime(seconds: number) {
   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 }
 
-function getFileExtension(fileName: string) {
-  const extension = fileName.split(".").pop();
-
-  return extension ? extension.toUpperCase() : "ARQ";
+function getClientErrorMessage(error: unknown) {
+  return error instanceof Error
+    ? error.message
+    : "Nao foi possivel concluir a operacao.";
 }
 
-function getPendingAttachmentKind(file: File): PendingAttachmentKind {
-  if (file.type.startsWith("image/")) return "image";
-  if (file.type.startsWith("video/")) return "video";
-  if (file.type.startsWith("audio/")) return "audio";
+function getAudioFileExtension(mimeType: string) {
+  if (mimeType.includes("mpeg") || mimeType.includes("mp3")) return "mp3";
+  if (mimeType.includes("mp4")) return "m4a";
+  if (mimeType.includes("ogg")) return "ogg";
+  if (mimeType.includes("wav")) return "wav";
 
-  return "document";
+  return "webm";
 }
 
 function downloadDocumentAttachment(
@@ -1054,6 +1034,7 @@ export function ChatWindow({
   const [pendingAttachments, setPendingAttachments] = useState<
     PendingAttachment[]
   >([]);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
   const [activePendingAttachmentId, setActivePendingAttachmentId] = useState<
     string | null
   >(null);
@@ -1084,6 +1065,7 @@ export function ChatWindow({
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isCancelRecordingConfirmOpen, setIsCancelRecordingConfirmOpen] =
     useState(false);
+  const [isSendingAudioRecording, setIsSendingAudioRecording] = useState(false);
   const [mediaViewerMessageId, setMediaViewerMessageId] = useState<
     string | null
   >(null);
@@ -1557,6 +1539,8 @@ export function ChatWindow({
   };
 
   const openAttachmentPicker = () => {
+    if (isUploadingAttachment) return;
+
     attachmentInputRef.current?.click();
   };
 
@@ -1580,32 +1564,56 @@ export function ChatWindow({
       return;
     }
 
-    const newAttachments = await Promise.all(
+    setIsUploadingAttachment(true);
+
+    const uploadResults = await Promise.allSettled(
       acceptedFiles.map(async (file) => {
-        const kind = getPendingAttachmentKind(file);
-        const shouldPersistUrl =
-          kind === "image" ||
-          kind === "video" ||
-          kind === "audio" ||
-          kind === "document";
+        const upload = await uploadFileAttachment(file);
 
         return {
-          id: `${file.name}-${file.lastModified}-${crypto.randomUUID()}`,
+          id: upload.id,
           file,
-          kind,
-          url: shouldPersistUrl ? await readFileAsDataUrl(file) : null,
-          extension: getFileExtension(file.name),
+          kind: upload.kind,
+          url: upload.url,
+          extension: upload.extension || "ARQ",
         } satisfies PendingAttachment;
       }),
     );
 
-    setPendingAttachments((currentAttachments) => [
-      ...currentAttachments,
-      ...newAttachments,
-    ]);
-    setActivePendingAttachmentId(
-      (currentId) => currentId ?? newAttachments[0].id,
+    setIsUploadingAttachment(false);
+
+    const newAttachments = uploadResults.flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : [],
     );
+    const rejectedUploads = uploadResults.filter(
+      (result) => result.status === "rejected",
+    );
+
+    if (rejectedUploads.length > 0) {
+      toast.error(
+        rejectedUploads.length === 1
+          ? "Nao foi possivel enviar 1 anexo."
+          : `Nao foi possivel enviar ${rejectedUploads.length} anexos.`,
+        {
+          description: getClientErrorMessage(
+            rejectedUploads[0].status === "rejected"
+              ? rejectedUploads[0].reason
+              : undefined,
+          ),
+        },
+      );
+    }
+
+    if (newAttachments.length > 0) {
+      setPendingAttachments((currentAttachments) => [
+        ...currentAttachments,
+        ...newAttachments,
+      ]);
+      setActivePendingAttachmentId(
+        (currentId) => currentId ?? newAttachments[0].id,
+      );
+    }
+
     event.target.value = "";
   };
 
@@ -1802,10 +1810,10 @@ export function ChatWindow({
   };
 
   const finishRecordingAudio = () =>
-    new Promise<string | undefined>((resolve) => {
+    new Promise<{ blob: Blob; mimeType: string } | undefined>((resolve) => {
       const mediaRecorder = mediaRecorderRef.current;
 
-      const createAudioUrl = (mimeType = "audio/webm") => {
+      const createAudioBlob = (mimeType = "audio/webm") => {
         const chunks = recordingAudioChunksRef.current;
 
         mediaRecorderRef.current = null;
@@ -1816,24 +1824,25 @@ export function ChatWindow({
           return;
         }
 
-        void readBlobAsDataUrl(new Blob(chunks, { type: mimeType })).then(
-          resolve,
-        );
+        resolve({
+          blob: new Blob(chunks, { type: mimeType }),
+          mimeType,
+        });
       };
 
       if (!mediaRecorder) {
-        createAudioUrl();
+        createAudioBlob();
         return;
       }
 
       const mimeType = mediaRecorder.mimeType || "audio/webm";
 
       if (mediaRecorder.state === "inactive") {
-        createAudioUrl(mimeType);
+        createAudioBlob(mimeType);
         return;
       }
 
-      mediaRecorder.onstop = () => createAudioUrl(mimeType);
+      mediaRecorder.onstop = () => createAudioBlob(mimeType);
       mediaRecorder.stop();
     });
 
@@ -1982,40 +1991,67 @@ export function ChatWindow({
   };
 
   const handleSendAudioRecording = async () => {
+    if (isSendingAudioRecording) return;
+
+    setIsSendingAudioRecording(true);
     isRecordingAudioRef.current = false;
     isRecordingPausedRef.current = false;
-    const audioSource = await finishRecordingAudio();
-    const newMessage: Message = {
-      id: createMessageId(currentUser.id),
-      content: "",
-      timestamp: new Date(),
-      isOwn: true,
-      senderId: currentUser.id,
-      senderName: currentUser.name,
-      status: "sent",
-      isPriority,
-      attachment: {
-        type: "audio",
-        src: audioSource,
-        duration: formatRecordingTime(recordingSeconds),
-        waveform: liveRecordingWaveform,
-      },
-    };
 
-    stopRecordingInput();
-    shouldScrollToBottomRef.current = true;
-    setMessages((currentMessages) => [...currentMessages, newMessage]);
-    scheduleOutgoingStatusUpdates([newMessage.id]);
-    if (isPriority) {
-      onPriorityMessageSent?.(newMessage);
+    const recordingDuration = formatRecordingTime(recordingSeconds);
+    const recordingWaveformSnapshot = liveRecordingWaveform;
+
+    try {
+      const recordedAudio = await finishRecordingAudio();
+      stopRecordingInput();
+
+      if (!recordedAudio) {
+        toast.error("Nao foi possivel capturar o audio gravado.");
+        return;
+      }
+
+      const extension = getAudioFileExtension(recordedAudio.mimeType);
+      const fileName = `audio-${new Date()
+        .toISOString()
+        .replace(/[:.]/g, "-")}.${extension}`;
+      const upload = await uploadFileAttachment(recordedAudio.blob, fileName);
+      const newMessage: Message = {
+        id: createMessageId(currentUser.id),
+        content: "",
+        timestamp: new Date(),
+        isOwn: true,
+        senderId: currentUser.id,
+        senderName: currentUser.name,
+        status: "sent",
+        isPriority,
+        attachment: {
+          type: "audio",
+          src: upload.url,
+          duration: recordingDuration,
+          waveform: recordingWaveformSnapshot,
+        },
+      };
+
+      shouldScrollToBottomRef.current = true;
+      setMessages((currentMessages) => [...currentMessages, newMessage]);
+      scheduleOutgoingStatusUpdates([newMessage.id]);
+      if (isPriority) {
+        onPriorityMessageSent?.(newMessage);
+      }
+      onTypingChange?.(false);
+      setIsPriority(false);
+    } catch (error) {
+      stopRecordingInput();
+      toast.error("Nao foi possivel enviar o audio.", {
+        description: getClientErrorMessage(error),
+      });
+    } finally {
+      setIsSendingAudioRecording(false);
+      setIsRecordingAudio(false);
+      setIsRecordingPaused(false);
+      setIsCancelRecordingConfirmOpen(false);
+      setRecordingSeconds(0);
+      setLiveRecordingWaveform(recordingWaveform);
     }
-    onTypingChange?.(false);
-    setIsRecordingAudio(false);
-    setIsRecordingPaused(false);
-    setIsCancelRecordingConfirmOpen(false);
-    setRecordingSeconds(0);
-    setLiveRecordingWaveform(recordingWaveform);
-    setIsPriority(false);
   };
 
   const handleSendMessage = () => {
@@ -2522,7 +2558,8 @@ export function ChatWindow({
         type="file"
         multiple
         className="hidden"
-        accept="image/*,video/*,audio/mpeg,audio/mp3,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+        accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+        disabled={isUploadingAttachment}
         onChange={handleAttachmentInputChange}
       />
 
@@ -3543,6 +3580,7 @@ export function ChatWindow({
                     size="icon"
                     className="h-12 w-12 shrink-0 rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
                     onClick={handleSendAudioRecording}
+                    disabled={isSendingAudioRecording}
                     aria-label="Enviar áudio"
                   >
                     <Send className="h-6 w-6" />
@@ -3583,7 +3621,10 @@ export function ChatWindow({
                         </span>
                         Prioritária
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={openAttachmentPicker}>
+                      <DropdownMenuItem
+                        disabled={isUploadingAttachment}
+                        onClick={openAttachmentPicker}
+                      >
                         <Paperclip className="mr-2 h-4 w-4" />
                         Upload
                       </DropdownMenuItem>
@@ -3622,6 +3663,7 @@ export function ChatWindow({
                     size="icon"
                     className="mb-0.5 hidden text-muted-foreground sm:flex"
                     onClick={openAttachmentPicker}
+                    disabled={isUploadingAttachment}
                     aria-label="Anexar arquivos"
                   >
                     <Paperclip className="h-5 w-5" />
