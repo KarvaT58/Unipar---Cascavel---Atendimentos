@@ -1,7 +1,4 @@
 import {
-  isDeepStrictEqual,
-} from "node:util"
-import {
   EMPTY_APP_STATE,
   mergeAppStates,
   normalizeAppState,
@@ -83,10 +80,38 @@ function omitEphemeralAppState(state: AppState): AppState {
   }
 }
 
+function toComparableJsonValue(value: unknown): unknown {
+  if (value instanceof Date) {
+    return value.toISOString()
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => toComparableJsonValue(item))
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, entryValue]) => entryValue !== undefined)
+        .sort(([firstKey], [secondKey]) => firstKey.localeCompare(secondKey))
+        .map(([entryKey, entryValue]) => [
+          entryKey,
+          toComparableJsonValue(entryValue),
+        ])
+    )
+  }
+
+  return value
+}
+
+function serializeComparableAppState(state: AppState) {
+  return JSON.stringify(toComparableJsonValue(omitEphemeralAppState(state)))
+}
+
 function hasPersistentStateChange(firstState: AppState, secondState: AppState) {
-  return !isDeepStrictEqual(
-    omitEphemeralAppState(firstState),
-    omitEphemeralAppState(secondState)
+  return (
+    serializeComparableAppState(firstState) !==
+    serializeComparableAppState(secondState)
   )
 }
 
