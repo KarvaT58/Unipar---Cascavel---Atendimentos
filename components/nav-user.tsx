@@ -67,6 +67,13 @@ export function NavUser({
     setShowLogoutConfirmation(false)
   }
 
+  function handleComingSoon(feature: string) {
+    setOpen(false)
+    toast.info("Em breve", {
+      description: `${feature} sera liberado futuramente.`,
+    })
+  }
+
   async function handleLogout() {
     const clientId = createBackendClientId()
 
@@ -187,9 +194,8 @@ export function NavUser({
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuItem
-                  render={<Link href="/estatisticas" />}
                   className="[&_svg]:!text-primary [&_svg_*]:!text-primary"
-                  onClick={() => setOpen(false)}
+                  onClick={() => handleComingSoon("Estatistica da conta")}
                 >
                   <ChartNoAxesCombinedIcon className="!text-primary" />
                   Estatística da conta
@@ -205,15 +211,13 @@ export function NavUser({
                   Perfil
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  render={<Link href="/relatorios" />}
-                  onClick={() => setOpen(false)}
+                  onClick={() => handleComingSoon("Relatorios")}
                 >
                   <ChartNoAxesColumnIcon />
                   Relatórios
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  render={<Link href="/notificacoes" />}
-                  onClick={() => setOpen(false)}
+                  onClick={() => handleComingSoon("Notificacoes")}
                 >
                   <BellIcon />
                   Notificações

@@ -1,10 +1,5 @@
-import { AppPageContent } from "@/components/app-page-content"
+import { ComingSoonPage } from "@/components/coming-soon-page"
 
 export default function EstatisticasPage() {
-  return (
-    <AppPageContent
-      title="Estatísticas"
-      description="Acompanhe indicadores internos, desempenho e evolução dos canais."
-    />
-  )
+  return <ComingSoonPage title="Estatistica da conta" />
 }

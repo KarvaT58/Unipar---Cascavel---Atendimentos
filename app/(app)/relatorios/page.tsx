@@ -1,10 +1,5 @@
-import { AppPageContent } from "@/components/app-page-content"
+import { ComingSoonPage } from "@/components/coming-soon-page"
 
 export default function RelatoriosPage() {
-  return (
-    <AppPageContent
-      title="Relatórios"
-      description="Página em desenvolvimento."
-    />
-  )
+  return <ComingSoonPage title="Relatorios" />
 }
