@@ -8,6 +8,7 @@ import {
 import {
   canUseOfflineFallback,
   isLocalDataOnlyEnabled,
+  readBooleanEnv,
 } from "@/lib/local-mode"
 import { prisma } from "@/lib/prisma"
 import { createRandomToken, hashToken } from "@/lib/security"
@@ -15,11 +16,19 @@ import { createRandomToken, hashToken } from "@/lib/security"
 export const SESSION_COOKIE = "auth_token"
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7
 
+function isSessionCookieSecure() {
+  if (process.env.SESSION_COOKIE_SECURE !== undefined) {
+    return readBooleanEnv(process.env.SESSION_COOKIE_SECURE)
+  }
+
+  return process.env.NODE_ENV === "production"
+}
+
 export function getSessionCookieOptions(expiresAt?: Date) {
   return {
     httpOnly: true,
     sameSite: "lax" as const,
-    secure: process.env.NODE_ENV === "production",
+    secure: isSessionCookieSecure(),
     path: "/",
     maxAge: SESSION_MAX_AGE_SECONDS,
     expires: expiresAt,
@@ -114,7 +123,7 @@ export function clearSessionCookie(response: NextResponse) {
   response.cookies.set(SESSION_COOKIE, "", {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: isSessionCookieSecure(),
     path: "/",
     maxAge: 0,
   })
