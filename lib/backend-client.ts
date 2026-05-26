@@ -23,6 +23,14 @@ export interface UserProfilePayload {
 }
 
 export type BackendAuthenticatedUser = Omit<UserProfilePayload, "clientId">;
+export type PresenceConnectionState = "active" | "inactive";
+export interface PresenceUpdatePayload {
+  clientId: string;
+  state?: PresenceConnectionState;
+  chatStatus?: UserChatStatus;
+  workStatus?: UserWorkStatus;
+  source?: string;
+}
 
 const BOOTSTRAP_RETRY_DELAYS_MS = [250, 1000];
 
@@ -134,6 +142,46 @@ export async function saveUserProfile(profile: UserProfilePayload) {
   }>;
 }
 
+export async function updateCurrentPresence(payload: PresenceUpdatePayload) {
+  const response = await fetch("/api/presence", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error("Nao foi possivel atualizar sua presenca.");
+  }
+
+  return response.json() as Promise<{ ok: boolean }>;
+}
+
+export function sendCurrentPresenceBeacon(payload: PresenceUpdatePayload) {
+  if (typeof navigator === "undefined") return false;
+
+  const body = JSON.stringify(payload);
+
+  if (typeof navigator.sendBeacon === "function") {
+    return navigator.sendBeacon(
+      "/api/presence",
+      new Blob([body], { type: "application/json" }),
+    );
+  }
+
+  fetch("/api/presence", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body,
+    keepalive: true,
+  }).catch(() => undefined);
+
+  return true;
+}
+
 export async function fetchCurrentSession() {
   const response = await fetch("/api/auth/session", {
     cache: "no-store",
@@ -148,8 +196,14 @@ export async function fetchCurrentSession() {
   return result.user ?? null;
 }
 
-export async function clearCurrentSession() {
+export async function clearCurrentSession(clientId?: string) {
   await fetch("/api/auth/session", {
     method: "DELETE",
+    headers: clientId
+      ? {
+          "Content-Type": "application/json",
+        }
+      : undefined,
+    body: clientId ? JSON.stringify({ clientId }) : undefined,
   });
 }

@@ -102,6 +102,10 @@ import {
   saveBackendState,
   saveUserProfile,
 } from "@/lib/backend-client";
+import {
+  getDisplayChatStatus,
+  PRESENCE_HEARTBEAT_MS,
+} from "@/lib/presence";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -170,8 +174,6 @@ const KANBAN_DUE_REMINDER_UNLOCK_SECONDS = 5;
 const LOAN_REMINDER_UNLOCK_SECONDS = 5;
 const ALERT_PREVIEW_MAX_LENGTH = 30;
 const TYPING_INDICATOR_TTL_MS = 3000;
-const PRESENCE_HEARTBEAT_MS = 15000;
-const PRESENCE_ONLINE_WINDOW_MS = 45000;
 const DIRECT_CONVERSATION_PREFIX = "dm:";
 const NOTIFICATION_SOUND_SRC = "/audio/notificacao.mp3";
 const NOTIFICATION_SOUND_STORAGE_LIMIT = 300;
@@ -193,13 +195,6 @@ function getNavFromPathname(pathname: string | null) {
 
 function getPathFromNav(item: string) {
   return isAppNavId(item) ? NAV_PATHS[item] : NAV_PATHS.chat;
-}
-
-function hasRecentPresence(lastSeenAt?: Date) {
-  return Boolean(
-    lastSeenAt &&
-      Date.now() - lastSeenAt.getTime() <= PRESENCE_ONLINE_WINDOW_MS,
-  );
 }
 
 function getDateKey(date: Date) {
@@ -1093,6 +1088,17 @@ export function UniparWorkspace({
     EMPTY_APP_STATE.adminUsers,
   );
   const [adminReports, setAdminReports] = useState<AdminReport[]>([]);
+  const [presenceNow, setPresenceNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const intervalId = window.setInterval(
+      () => setPresenceNow(Date.now()),
+      PRESENCE_HEARTBEAT_MS,
+    );
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   const directoryUsers = useMemo<DirectoryUser[]>(() => {
     const usersByEmail = new Map<string, DirectoryUser>();
 
@@ -1111,12 +1117,9 @@ export function UniparWorkspace({
         const lastSeenAt = isCurrentUser
           ? (currentAnnouncementUser.lastSeenAt ?? new Date())
           : user.lastSeenAt;
-        const hasLiveSession = isCurrentUser || hasRecentPresence(lastSeenAt);
-        const chatStatus = hasLiveSession
-          ? isCurrentUser
-            ? getChatPresenceStatus(currentAnnouncementUser)
-            : (user.chatStatus ?? "online")
-          : "offline";
+        const chatStatus = isCurrentUser
+          ? getChatPresenceStatus(currentAnnouncementUser)
+          : getDisplayChatStatus(user.chatStatus, lastSeenAt, presenceNow);
 
         usersByEmail.set(normalizedEmail, {
           id: user.id,
@@ -1143,7 +1146,7 @@ export function UniparWorkspace({
     return Array.from(usersByEmail.values()).sort((firstUser, secondUser) =>
       firstUser.name.localeCompare(secondUser.name),
     );
-  }, [adminUsers, currentAnnouncementUser]);
+  }, [adminUsers, currentAnnouncementUser, presenceNow]);
   const announcementRecipients = directoryUsers;
   const currentUserSector = useMemo<Sector>(() => {
     if (currentSessionUser) return currentSessionUser.sector;
@@ -1510,90 +1513,6 @@ export function UniparWorkspace({
       cancelled = true;
     };
   }, []);
-
-  const touchCurrentUserPresence = useCallback(() => {
-    if (!currentSessionUser) return;
-
-    const seenAt = new Date();
-    const chatStatus = currentSessionUser.chatStatus ?? "online";
-
-    setAdminUsers((currentUsers) => {
-      let foundUser = false;
-      const updatedUsers = currentUsers.map((user) => {
-        const sameUser =
-          user.id === currentSessionUser.id ||
-          user.email.toLowerCase() === currentSessionUser.email.toLowerCase();
-
-        if (!sameUser) return user;
-
-        foundUser = true;
-
-        return {
-          ...user,
-          name: currentSessionUser.name,
-          email: currentSessionUser.email,
-          sector: currentSessionUser.sector,
-          isAdmin: user.isAdmin || currentSessionUser.isAdmin,
-          avatar: currentSessionUser.avatar,
-          about: currentSessionUser.about,
-          chatStatus,
-          workStatus: currentSessionUser.workStatus ?? user.workStatus,
-          lastSeenAt: seenAt,
-        };
-      });
-
-      if (foundUser) return updatedUsers;
-
-      return [
-        {
-          id: currentSessionUser.id,
-          name: currentSessionUser.name,
-          email: currentSessionUser.email,
-          sector: currentSessionUser.sector,
-          password: "",
-          isAdmin: currentSessionUser.isAdmin,
-          status: "active",
-          createdAt: seenAt,
-          avatar: currentSessionUser.avatar,
-          about: currentSessionUser.about,
-          chatStatus,
-          workStatus: currentSessionUser.workStatus,
-          lastSeenAt: seenAt,
-        },
-        ...updatedUsers,
-      ];
-    });
-  }, [currentSessionUser]);
-
-  useEffect(() => {
-    if (!isAuthenticated || !currentSessionUser) return;
-
-    const initialTouchTimeoutId = window.setTimeout(
-      touchCurrentUserPresence,
-      0,
-    );
-
-    const intervalId = window.setInterval(
-      touchCurrentUserPresence,
-      PRESENCE_HEARTBEAT_MS,
-    );
-    const handleFocus = () => touchCurrentUserPresence();
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        touchCurrentUserPresence();
-      }
-    };
-
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      window.clearTimeout(initialTouchTimeoutId);
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [currentSessionUser, isAuthenticated, touchCurrentUserPresence]);
 
   useEffect(() => {
     if (!isCheckingSession && isAuthenticated && activeNav === "admin") {
@@ -5012,7 +4931,9 @@ export function UniparWorkspace({
       );
     }
 
-    clearCurrentSession().catch((error) => console.error(error));
+    clearCurrentSession(backendClientIdRef.current).catch((error) =>
+      console.error(error),
+    );
     setIsAuthenticated(false);
     setIsCheckingSession(false);
     setCurrentSessionUser(null);

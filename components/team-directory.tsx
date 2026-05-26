@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   EllipsisVerticalIcon,
   MessageCircleIcon,
@@ -43,6 +44,10 @@ import {
   type UserWorkStatus,
 } from "@/lib/admin-data"
 import { formatLastSeenAt, getChatPresenceMeta } from "@/lib/chat-data"
+import {
+  getDisplayChatStatus,
+  PRESENCE_HEARTBEAT_MS,
+} from "@/lib/presence"
 import { cn } from "@/lib/utils"
 
 export type TeamUser = {
@@ -75,9 +80,41 @@ const sectorFilterOptions = [
 ]
 
 export function TeamDirectory({ users }: TeamDirectoryProps) {
+  const router = useRouter()
   const [search, setSearch] = React.useState("")
   const [sectorFilter, setSectorFilter] = React.useState(allFilterValue)
   const [roleFilter, setRoleFilter] = React.useState(allFilterValue)
+  const [presenceNow, setPresenceNow] = React.useState(() => Date.now())
+
+  React.useEffect(() => {
+    const refresh = () => router.refresh()
+    const presenceTimerId = window.setInterval(
+      () => setPresenceNow(Date.now()),
+      PRESENCE_HEARTBEAT_MS
+    )
+    const refreshTimerId = window.setInterval(refresh, 30_000)
+    const events = new EventSource("/api/realtime?lastEventId=latest")
+
+    events.addEventListener("state", refresh)
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        setPresenceNow(Date.now())
+        refresh()
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    window.addEventListener("focus", refresh)
+
+    return () => {
+      window.clearInterval(presenceTimerId)
+      window.clearInterval(refreshTimerId)
+      events.close()
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+      window.removeEventListener("focus", refresh)
+    }
+  }, [router])
 
   const filteredUsers = React.useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -166,7 +203,11 @@ export function TeamDirectory({ users }: TeamDirectoryProps) {
                 <span />
               </div>
               {filteredUsers.map((user) => (
-                <TeamUserRow key={user.id} user={user} />
+                <TeamUserRow
+                  key={user.id}
+                  user={user}
+                  presenceNow={presenceNow}
+                />
               ))}
             </div>
           ) : (
@@ -187,13 +228,24 @@ export function TeamDirectory({ users }: TeamDirectoryProps) {
   )
 }
 
-function TeamUserRow({ user }: { user: TeamUser }) {
+function TeamUserRow({
+  presenceNow,
+  user,
+}: {
+  presenceNow: number
+  user: TeamUser
+}) {
+  const chatStatus = getDisplayChatStatus(
+    user.chatStatus,
+    user.lastSeenAt,
+    presenceNow
+  )
   const presence = getChatPresenceMeta({
-    chatStatus: user.chatStatus,
-    isOnline: user.chatStatus === "online",
+    chatStatus,
+    isOnline: chatStatus === "online",
   })
   const offlineHint =
-    user.chatStatus === "offline" ? formatLastSeenAt(user.lastSeenAt) : null
+    chatStatus === "offline" ? formatLastSeenAt(user.lastSeenAt) : null
 
   return (
     <div className="grid grid-cols-[1.15fr_0.7fr_1.2fr_0.68fr_0.75fr_0.55fr_0.9fr_42px] items-center gap-3 border-b px-3 py-3 text-sm last:border-b-0">
@@ -224,7 +276,7 @@ function TeamUserRow({ user }: { user: TeamUser }) {
       <span className="text-muted-foreground">{user.phone || "-"}</span>
       <span className="break-all leading-snug">{user.email}</span>
       <div className="min-w-0">
-        <PresencePill status={user.chatStatus} />
+        <PresencePill status={chatStatus} />
         {offlineHint ? (
           <p className="mt-1 truncate text-[11px] text-muted-foreground">
             {offlineHint}

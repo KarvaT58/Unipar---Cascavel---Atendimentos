@@ -17,6 +17,7 @@ import {
 } from "@/lib/local-mode"
 import { listOfflineUsers } from "@/lib/offline-auth-store"
 import { isDatabaseConnectionError, prisma } from "@/lib/prisma"
+import { getHydratedPresenceSnapshot } from "@/lib/server/presence"
 import {
   readLatestOfflineRealtimeEventId,
   readOfflineAppState,
@@ -53,6 +54,11 @@ type AuthUserRow = {
   status: string
   createdAt: Date | string
   updatedAt: Date | string
+  presence?: {
+    chatStatus: string
+    workStatus: string
+    lastSeenAt: Date | string | null
+  } | null
 }
 
 function toJsonValue(state: AppState) {
@@ -349,6 +355,13 @@ async function readAuthUsers(): Promise<AuthUserRow[]> {
         status: true,
         createdAt: true,
         updatedAt: true,
+        presence: {
+          select: {
+            chatStatus: true,
+            workStatus: true,
+            lastSeenAt: true,
+          },
+        },
       },
     })
   } catch (error) {
@@ -389,6 +402,14 @@ function toAdminUser(
   user: AuthUserRow,
   currentUser?: AdminUser
 ): AdminUser {
+  const presence = getHydratedPresenceSnapshot(
+    user.presence ?? {
+      chatStatus: currentUser?.chatStatus,
+      workStatus: currentUser?.workStatus,
+      lastSeenAt: currentUser?.lastSeenAt,
+    }
+  )
+
   return {
     id: user.id,
     name: user.name,
@@ -401,8 +422,9 @@ function toAdminUser(
       user.createdAt instanceof Date ? user.createdAt : new Date(user.createdAt),
     avatar: currentUser?.avatar,
     about: currentUser?.about,
-    chatStatus: currentUser?.chatStatus,
-    workStatus: currentUser?.workStatus,
+    chatStatus: presence.chatStatus,
+    workStatus: presence.workStatus,
+    lastSeenAt: presence.lastSeenAt,
   }
 }
 

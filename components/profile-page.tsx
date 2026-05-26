@@ -190,6 +190,12 @@ export function ProfilePage() {
 
     try {
       const nextState = upsertProfileAdminUser(latestStateRef.current, profile)
+
+      await saveUserProfile({
+        ...profile,
+        clientId: clientIdRef.current || "profile-page",
+      }).catch(() => undefined)
+
       const envelope = await saveBackendState(
         nextState,
         clientIdRef.current || "profile-page",
@@ -198,11 +204,6 @@ export function ProfilePage() {
 
       latestStateRef.current = envelope.state
       setSavedProfile(profile)
-
-      await saveUserProfile({
-        ...profile,
-        clientId: clientIdRef.current || "profile-page",
-      }).catch(() => undefined)
 
       toast.success("Perfil atualizado.")
     } catch (error) {

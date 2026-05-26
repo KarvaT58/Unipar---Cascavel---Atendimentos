@@ -31,6 +31,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { createBackendClientId } from "@/lib/backend-client"
 
 export function NavUser({
   user,
@@ -67,7 +68,15 @@ export function NavUser({
   }
 
   async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" }).catch(() => null)
+    const clientId = createBackendClientId()
+
+    await fetch("/api/auth/logout", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ clientId }),
+    }).catch(() => null)
     window.localStorage.removeItem("auth_token")
     window.sessionStorage.clear()
     document.cookie =

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 
 import { AppHeader } from "@/components/app-header"
 import { AppSidebar } from "@/components/app-sidebar"
+import { PresenceTracker } from "@/components/presence-tracker"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { WorkspaceRouteSlot } from "@/components/workspace-route-slot"
 import type { Sector as WorkspaceSector } from "@/lib/admin-data"
@@ -60,6 +61,7 @@ export default async function AppLayout({
 
   return (
     <SidebarProvider>
+      <PresenceTracker />
       <AppSidebar
         user={{
           name: currentUser?.name ?? "Usuário",

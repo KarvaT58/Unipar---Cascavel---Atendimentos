@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 
-import { isLocalDataOnlyEnabled } from "@/lib/local-mode"
 import {
   isUserChatStatus,
   isUserWorkStatus,
@@ -12,17 +11,26 @@ import type { UserChatStatus, UserWorkStatus } from "@/lib/admin-data"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
+type PresenceState = "active" | "inactive"
+
 function getString(body: Record<string, unknown>, key: string) {
   const value = body[key]
 
   return typeof value === "string" ? value.trim() : undefined
 }
 
-export async function PUT(request: Request) {
-  const user = await getSessionUser().catch(() => null)
+function getPresenceState(value: unknown): PresenceState {
+  return value === "inactive" ? "inactive" : "active"
+}
 
-  if (!user) {
-    return NextResponse.json({ ok: false }, { status: 401 })
+export async function POST(request: Request) {
+  const currentUser = await getSessionUser().catch(() => null)
+
+  if (!currentUser) {
+    return NextResponse.json(
+      { message: "Sessao expirada. Faca login novamente." },
+      { status: 401 }
+    )
   }
 
   const body = ((await request.json().catch(() => ({}))) ?? {}) as Record<
@@ -35,20 +43,18 @@ export async function PUT(request: Request) {
   const workStatus = isUserWorkStatus(body.workStatus)
     ? (body.workStatus as UserWorkStatus)
     : undefined
-
-  if (chatStatus || workStatus) {
-    await updateUserPresence({
-      userId: user.id,
-      clientId: getString(body, "clientId"),
-      chatStatus,
-      workStatus,
-      state: "active",
-      source: "presence:profile",
-    }).catch(() => undefined)
-  }
-
-  return NextResponse.json({
-    ok: true,
-    databaseConnected: !isLocalDataOnlyEnabled(),
+  const presence = await updateUserPresence({
+    userId: currentUser.id,
+    clientId: getString(body, "clientId"),
+    chatStatus,
+    workStatus,
+    state: getPresenceState(body.state),
+    source: getString(body, "source") ?? "presence:api",
   })
+
+  return NextResponse.json({ ok: true, presence })
+}
+
+export async function PUT(request: Request) {
+  return POST(request)
 }

@@ -10,6 +10,7 @@ import {
   isLocalDataOnlyEnabled,
 } from "@/lib/local-mode"
 import { prisma } from "@/lib/prisma"
+import { forceUserOnline } from "@/lib/server/presence"
 import { createSession, setSessionCookie } from "@/lib/session"
 import {
   isInstitutionalEmail,
@@ -60,6 +61,11 @@ export async function POST(request: NextRequest) {
     }
 
     const session = await createSession(user.id, request)
+    const presence = await forceUserOnline(user.id).catch(() => ({
+      chatStatus: "online" as const,
+      workStatus: "available" as const,
+      lastSeenAt: new Date(),
+    }))
     const response = NextResponse.json({
       user: {
         id: user.id,
@@ -67,6 +73,9 @@ export async function POST(request: NextRequest) {
         email: user.email,
         sector: user.sector,
         role: user.role,
+        chatStatus: presence.chatStatus,
+        workStatus: presence.workStatus,
+        lastSeenAt: presence.lastSeenAt,
       },
     })
 
