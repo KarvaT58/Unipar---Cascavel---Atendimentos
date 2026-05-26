@@ -215,10 +215,11 @@ async function saveAppStateInDatabaseNow(
             where: { key: STATE_KEY },
           })
           const incomingStateToSave = omitEphemeralAppState(state)
+          const currentState = currentDocument
+            ? normalizeAppState(currentDocument.data)
+            : null
 
-          if (currentDocument) {
-            const currentState = normalizeAppState(currentDocument.data)
-
+          if (currentDocument && currentState) {
             if (!hasPersistentStateChange(currentState, state)) {
               return {
                 state: {
@@ -232,10 +233,25 @@ async function saveAppStateInDatabaseNow(
 
           const stateToSave = currentDocument
             ? mergeAppStates(
-                omitEphemeralAppState(normalizeAppState(currentDocument.data)),
+                omitEphemeralAppState(currentState ?? EMPTY_APP_STATE),
                 incomingStateToSave
               )
             : incomingStateToSave
+
+          if (
+            currentDocument &&
+            currentState &&
+            !hasPersistentStateChange(currentState, stateToSave)
+          ) {
+            return {
+              state: {
+                ...currentState,
+                typingIndicators: state.typingIndicators,
+              },
+              revision: Number(currentDocument.revision),
+            }
+          }
+
           const document = currentDocument
             ? await tx.appStateDocument.update({
                 where: { key: STATE_KEY },
