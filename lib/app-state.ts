@@ -507,6 +507,10 @@ export function mergeAppStates(
       storedState.groupMessagesByContact,
       incomingState.groupMessagesByContact,
     ),
+    groupMetadataById: {
+      ...storedState.groupMetadataById,
+      ...incomingState.groupMetadataById,
+    },
     serviceTickets: mergeServiceTickets(
       storedState.serviceTickets,
       incomingState.serviceTickets,

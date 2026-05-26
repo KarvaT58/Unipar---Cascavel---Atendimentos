@@ -642,9 +642,11 @@ function canUserSeeSidebarGroup(
   userId: string,
   state: AppState
 ) {
+  if (!userId) return false
+
   const metadata = state.groupMetadataById[groupId]
 
-  if (!metadata) return true
+  if (!metadata) return false
 
   return new Set([...metadata.adminIds, ...metadata.participantIds]).has(userId)
 }

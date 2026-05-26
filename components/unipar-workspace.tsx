@@ -456,9 +456,11 @@ function canUserSeeGroup(
   userId: string,
   metadataById: Record<string, GroupMetadata>,
 ) {
+  if (!userId) return false;
+
   const metadata = metadataById[groupId];
 
-  if (!metadata) return true;
+  if (!metadata) return false;
 
   return getGroupMemberIds(metadata).includes(userId);
 }
@@ -3901,6 +3903,22 @@ export function UniparWorkspace({
   };
 
   const handleSelectGroup = (group: Contact) => {
+    if (
+      !canUserSeeGroup(
+        group.id,
+        currentAnnouncementUser.id,
+        groupMetadataById,
+      )
+    ) {
+      setSelectedGroup(null);
+      setActiveSidePanel(null);
+      setHighlightedMessageId(null);
+      toast.error("Grupo indisponivel.", {
+        description: "Voce nao participa deste grupo.",
+      });
+      return;
+    }
+
     const openedGroup = { ...group, unreadCount: 0 };
     const groupMessages = groupMessagesByContactRef.current[group.id];
 
