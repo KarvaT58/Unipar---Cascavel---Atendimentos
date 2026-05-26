@@ -1,4 +1,7 @@
 import {
+  isDeepStrictEqual,
+} from "node:util"
+import {
   EMPTY_APP_STATE,
   mergeAppStates,
   normalizeAppState,
@@ -73,9 +76,9 @@ function omitEphemeralAppState(state: AppState): AppState {
 }
 
 function hasPersistentStateChange(firstState: AppState, secondState: AppState) {
-  return (
-    serializeAppState(omitEphemeralAppState(firstState)) !==
-    serializeAppState(omitEphemeralAppState(secondState))
+  return !isDeepStrictEqual(
+    omitEphemeralAppState(firstState),
+    omitEphemeralAppState(secondState)
   )
 }
 
