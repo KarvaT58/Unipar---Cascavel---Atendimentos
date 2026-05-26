@@ -99,6 +99,7 @@ import {
   fetchCurrentSession,
   fetchBackendState,
   isTransientBackendFetchError,
+  publishTypingIndicator,
   saveBackendState,
   saveUserProfile,
 } from "@/lib/backend-client";
@@ -119,6 +120,20 @@ type ReportConversationTarget = {
   contact: Contact;
   kind: "contact" | "group";
 } | null;
+type RealtimeEventPayload = {
+  clientId?: string | null;
+  payload?: {
+    key?: string;
+    typing?: {
+      scope?: TypingIndicatorState["scope"];
+      targetId?: string;
+      userId?: string;
+      userName?: string;
+      isTyping?: boolean;
+      updatedAt?: string;
+    };
+  };
+};
 type PriorityMessageAlert = {
   conversation: Contact;
   message: Message;
@@ -1223,6 +1238,9 @@ export function UniparWorkspace({
   const [typingIndicators, setTypingIndicators] = useState<
     Record<string, TypingIndicatorState>
   >(EMPTY_APP_STATE.typingIndicators);
+  const typingIndicatorsRef = useRef<Record<string, TypingIndicatorState>>(
+    EMPTY_APP_STATE.typingIndicators,
+  );
   const backendClientIdRef = useRef("");
   const backendReadyRef = useRef(false);
   const applyingBackendStateRef = useRef(false);
@@ -1311,7 +1329,7 @@ export function UniparWorkspace({
       kanbanLabels,
       helpItems,
       extensionItems,
-      typingIndicators,
+      typingIndicators: EMPTY_APP_STATE.typingIndicators,
       pageRecords: EMPTY_APP_STATE.pageRecords,
     }),
     [
@@ -1334,7 +1352,6 @@ export function UniparWorkspace({
       loanRequests,
       messagesByContact,
       serviceTickets,
-      typingIndicators,
     ],
   );
 
@@ -1406,7 +1423,6 @@ export function UniparWorkspace({
     setKanbanLabels(nextState.kanbanLabels);
     setHelpItems(nextState.helpItems);
     setExtensionItems(nextState.extensionItems);
-    setTypingIndicators(nextState.typingIndicators);
     setSelectedContact((currentContact) =>
       currentContact
         ? ([...nextState.contacts, ...nextState.archivedContacts].find(
@@ -1460,6 +1476,56 @@ export function UniparWorkspace({
         }
       });
   }, [applyBackendState]);
+
+  useEffect(() => {
+    typingIndicatorsRef.current = typingIndicators;
+  }, [typingIndicators]);
+
+  const applyTypingRealtimeEvent = useCallback(
+    (payload: RealtimeEventPayload["payload"]) => {
+      const typing = payload?.typing;
+      const scope = typing?.scope;
+      const targetId = typing?.targetId;
+      const userId = typing?.userId;
+      const userName = typing?.userName;
+
+      if (!scope || !targetId || !userId || !userName) {
+        return;
+      }
+
+      const indicatorKey = getTypingIndicatorKey(
+        scope,
+        targetId,
+        userId,
+      );
+
+      setTypingIndicators((currentIndicators) => {
+        const nextIndicators = { ...currentIndicators };
+
+        if (!typing.isTyping) {
+          if (!currentIndicators[indicatorKey]) return currentIndicators;
+
+          delete nextIndicators[indicatorKey];
+          typingIndicatorsRef.current = nextIndicators;
+          return nextIndicators;
+        }
+
+        nextIndicators[indicatorKey] = {
+          scope,
+          userId,
+          userName,
+          ...(scope === "chat"
+            ? { recipientId: targetId }
+            : { groupId: targetId }),
+          updatedAt: typing.updatedAt ? new Date(typing.updatedAt) : new Date(),
+        };
+        typingIndicatorsRef.current = nextIndicators;
+
+        return nextIndicators;
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     refreshBackendStateRef.current = refreshBackendState;
@@ -1545,11 +1611,16 @@ export function UniparWorkspace({
     const events = new EventSource("/api/realtime?lastEventId=latest");
 
     events.addEventListener("state", (event) => {
-      const payload = JSON.parse((event as MessageEvent).data) as {
-        clientId?: string | null;
-      };
+      const payload = JSON.parse(
+        (event as MessageEvent).data,
+      ) as RealtimeEventPayload;
 
       if (payload.clientId === backendClientIdRef.current) return;
+
+      if (payload.payload?.key === "typing") {
+        applyTypingRealtimeEvent(payload.payload);
+        return;
+      }
 
       refreshBackendStateRef.current();
     });
@@ -1557,7 +1628,7 @@ export function UniparWorkspace({
     return () => {
       events.close();
     };
-  }, [applyBackendState]);
+  }, [applyBackendState, applyTypingRealtimeEvent]);
 
   const flushBackendStateSave = useCallback(() => {
     if (!backendReadyRef.current || applyingBackendStateRef.current) return;
@@ -2748,7 +2819,10 @@ export function UniparWorkspace({
           return currentIndicators;
         }
 
-        return Object.fromEntries(activeEntries);
+        const nextIndicators = Object.fromEntries(activeEntries);
+        typingIndicatorsRef.current = nextIndicators;
+
+        return nextIndicators;
       });
     }, 2000);
 
@@ -4532,23 +4606,25 @@ export function UniparWorkspace({
         targetId,
         currentAnnouncementUser.id,
       );
+      const currentIndicator = typingIndicatorsRef.current[indicatorKey];
+
+      if (!isTyping && !currentIndicator) return;
+
+      if (
+        isTyping &&
+        currentIndicator &&
+        Date.now() - new Date(currentIndicator.updatedAt).getTime() < 1200
+      ) {
+        return;
+      }
 
       setTypingIndicators((currentIndicators) => {
         const nextIndicators = { ...currentIndicators };
 
         if (!isTyping) {
-          if (!currentIndicators[indicatorKey]) return currentIndicators;
-
           delete nextIndicators[indicatorKey];
+          typingIndicatorsRef.current = nextIndicators;
           return nextIndicators;
-        }
-
-        const currentIndicator = currentIndicators[indicatorKey];
-        if (
-          currentIndicator &&
-          Date.now() - new Date(currentIndicator.updatedAt).getTime() < 1200
-        ) {
-          return currentIndicators;
         }
 
         nextIndicators[indicatorKey] = {
@@ -4560,11 +4636,17 @@ export function UniparWorkspace({
             : { groupId: targetId }),
           updatedAt: new Date(),
         };
+        typingIndicatorsRef.current = nextIndicators;
 
         return nextIndicators;
       });
 
-      window.setTimeout(() => flushBackendStateSaveRef.current(), 80);
+      publishTypingIndicator({
+        clientId: backendClientIdRef.current || "unknown-client",
+        scope,
+        targetId,
+        isTyping,
+      }).catch(() => undefined);
     },
     [currentAnnouncementUser.id, currentAnnouncementUser.name],
   );

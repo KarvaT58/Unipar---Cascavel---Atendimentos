@@ -40,8 +40,21 @@ import {
 } from "@/lib/service-ticket-notifications"
 
 const SERVICE_TICKET_NOTIFICATION_SOUND_SRC = "/audio/notificacao.mp3"
-const SERVICE_TICKET_NOTIFICATION_FALLBACK_REFRESH_MS = 3000
+const SERVICE_TICKET_NOTIFICATION_FALLBACK_REFRESH_MS = 60000
 const DIRECT_CONVERSATION_PREFIX = "dm:"
+
+function getRealtimePayloadKey(event: Event) {
+  try {
+    const realtimeEvent = JSON.parse((event as MessageEvent).data) as {
+      payload?: { key?: unknown }
+    }
+    const key = realtimeEvent.payload?.key
+
+    return typeof key === "string" ? key : undefined
+  } catch {
+    return undefined
+  }
+}
 
 const data = {
   teams: [
@@ -410,7 +423,11 @@ export function AppSidebar({
 
     const eventSource = new EventSource("/api/realtime?lastEventId=latest")
 
-    eventSource.addEventListener("state", () => {
+    eventSource.addEventListener("state", (event) => {
+      const payloadKey = getRealtimePayloadKey(event)
+
+      if (payloadKey && payloadKey !== "main") return
+
       void refreshServiceTicketNotifications({
         fetchState: true,
         playSound: true,

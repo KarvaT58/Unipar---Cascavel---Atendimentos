@@ -79,6 +79,19 @@ const sectorFilterOptions = [
   ...accessSectorComboboxOptions,
 ]
 
+function getRealtimePayloadKey(event: Event) {
+  try {
+    const realtimeEvent = JSON.parse((event as MessageEvent).data) as {
+      payload?: { key?: unknown }
+    }
+    const key = realtimeEvent.payload?.key
+
+    return typeof key === "string" ? key : undefined
+  } catch {
+    return undefined
+  }
+}
+
 export function TeamDirectory({ users }: TeamDirectoryProps) {
   const router = useRouter()
   const [search, setSearch] = React.useState("")
@@ -95,7 +108,11 @@ export function TeamDirectory({ users }: TeamDirectoryProps) {
     const refreshTimerId = window.setInterval(refresh, 30_000)
     const events = new EventSource("/api/realtime?lastEventId=latest")
 
-    events.addEventListener("state", refresh)
+    events.addEventListener("state", (event) => {
+      if (getRealtimePayloadKey(event) === "typing") return
+
+      refresh()
+    })
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {

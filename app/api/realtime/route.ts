@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 const encoder = new TextEncoder()
-const REALTIME_POLL_INTERVAL_MS = 500
+const REALTIME_POLL_INTERVAL_MS = 1000
 
 function encodeSse(event: string, data: unknown) {
   return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)

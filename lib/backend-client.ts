@@ -5,6 +5,7 @@ import {
   serializeAppState,
   type AppState,
   type AppStateEnvelope,
+  type TypingIndicatorState,
 } from "@/lib/app-state";
 import type { Sector, UserChatStatus, UserWorkStatus } from "@/lib/admin-data";
 
@@ -30,6 +31,12 @@ export interface PresenceUpdatePayload {
   chatStatus?: UserChatStatus;
   workStatus?: UserWorkStatus;
   source?: string;
+}
+export interface TypingIndicatorPayload {
+  clientId: string;
+  scope: TypingIndicatorState["scope"];
+  targetId: string;
+  isTyping: boolean;
 }
 
 const BOOTSTRAP_RETRY_DELAYS_MS = [250, 1000];
@@ -153,6 +160,22 @@ export async function updateCurrentPresence(payload: PresenceUpdatePayload) {
 
   if (!response.ok) {
     throw new Error("Nao foi possivel atualizar sua presenca.");
+  }
+
+  return response.json() as Promise<{ ok: boolean }>;
+}
+
+export async function publishTypingIndicator(payload: TypingIndicatorPayload) {
+  const response = await fetch("/api/typing", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error("Nao foi possivel atualizar o indicador de digitacao.");
   }
 
   return response.json() as Promise<{ ok: boolean }>;
