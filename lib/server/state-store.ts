@@ -71,6 +71,14 @@ function toJsonValue(state: AppState) {
 function omitEphemeralAppState(state: AppState): AppState {
   return {
     ...state,
+    adminUsers: state.adminUsers.map((user) => {
+      const persistentUser: AdminUser = { ...user }
+
+      delete persistentUser.chatStatus
+      delete persistentUser.lastSeenAt
+      delete persistentUser.workStatus
+      return persistentUser
+    }),
     typingIndicators: EMPTY_APP_STATE.typingIndicators,
   }
 }
