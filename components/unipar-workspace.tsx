@@ -124,7 +124,7 @@ type PriorityMessageAlert = {
 
 type AccessRequestInput = Omit<AccessRequest, "id" | "createdAt" | "status">;
 type AdminUserInput = Omit<AdminUser, "id" | "createdAt" | "status">;
-type AuthenticatedUser = {
+export type UniparWorkspaceInitialUser = {
   id: string;
   name: string;
   email: string;
@@ -136,6 +136,7 @@ type AuthenticatedUser = {
   workStatus?: UserWorkStatus;
   lastSeenAt?: Date;
 };
+type AuthenticatedUser = UniparWorkspaceInitialUser;
 type ProfileUpdate = Partial<
   Pick<AuthenticatedUser, "avatar" | "about" | "chatStatus" | "workStatus">
 >;
@@ -966,15 +967,29 @@ function ExtensionsPage({
 
 export function UniparWorkspace({
   activeNav: forcedActiveNav,
+  initialUser,
 }: {
   activeNav?: AppNavId;
+  initialUser?: UniparWorkspaceInitialUser | null;
 }) {
+  const initialSessionUser = initialUser
+    ? {
+        ...initialUser,
+        avatar: initialUser.avatar ?? "",
+      }
+    : null;
+  const hasInitialSessionUser = Boolean(initialSessionUser);
+  const usedInitialSessionRef = useRef(hasInitialSessionUser);
   const router = useRouter();
   const pathname = usePathname();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(
+    hasInitialSessionUser,
+  );
+  const [isCheckingSession, setIsCheckingSession] = useState(
+    !hasInitialSessionUser,
+  );
   const [currentSessionUser, setCurrentSessionUser] =
-    useState<AuthenticatedUser | null>(null);
+    useState<AuthenticatedUser | null>(initialSessionUser);
   const currentAnnouncementUser = useMemo<DirectoryUser>(() => {
     if (currentSessionUser) {
       const chatStatus = currentSessionUser.chatStatus ?? "online";
@@ -1469,6 +1484,8 @@ export function UniparWorkspace({
   }, [applyBackendState]);
 
   useEffect(() => {
+    if (usedInitialSessionRef.current) return;
+
     let cancelled = false;
 
     fetchCurrentSession()
@@ -1892,7 +1909,10 @@ export function UniparWorkspace({
     },
     [currentAnnouncementUser.id, isMessageFromCurrentUser],
   );
-  const displayContacts = useMemo<Contact[]>(() => {
+  const displayContactBuckets = useMemo<{
+    active: Contact[];
+    archived: Contact[];
+  }>(() => {
     const currentUserId = currentAnnouncementUser.id;
     const contactIds = new Set<string>();
     const storedContacts = [...contacts, ...archivedContacts];
@@ -1908,7 +1928,12 @@ export function UniparWorkspace({
       contactIds.add(contactId);
     };
 
-    if (!currentUserId) return [];
+    if (!currentUserId) {
+      return {
+        active: [],
+        archived: [],
+      };
+    }
 
     storedContacts.forEach((contact) => {
       if (isConversationHiddenForUser(contact, currentUserId)) return;
@@ -1959,7 +1984,7 @@ export function UniparWorkspace({
       }
     });
 
-    return Array.from(contactIds)
+    const displayableContacts = Array.from(contactIds)
       .map((contactId): Contact | null => {
         const user = directoryUsersById.get(contactId);
 
@@ -2015,9 +2040,11 @@ export function UniparWorkspace({
         };
       })
       .filter((contact): contact is Contact => contact !== null)
-      .filter((contact) =>
-        showArchived ? contact.isArchived : !contact.isArchived,
-      );
+
+    return {
+      active: displayableContacts.filter((contact) => !contact.isArchived),
+      archived: displayableContacts.filter((contact) => contact.isArchived),
+    };
   }, [
     archivedContacts,
     buildContactSummary,
@@ -2030,8 +2057,11 @@ export function UniparWorkspace({
     isUserTypingToCurrentUser,
     messagesByContact,
     selectedContact?.id,
-    showArchived,
   ]);
+  const displayContacts = showArchived
+    ? displayContactBuckets.archived
+    : displayContactBuckets.active;
+  const visibleArchivedContactCount = displayContactBuckets.archived.length;
   const displayGroups = useMemo(
     () =>
       (showArchivedGroups
@@ -2075,6 +2105,40 @@ export function UniparWorkspace({
       showArchivedGroups,
     ],
   );
+  const visibleArchivedGroupCount = useMemo(
+    () =>
+      archivedGroups.filter(
+        (group) =>
+          !isConversationHiddenForUser(group, currentAnnouncementUser.id) &&
+          canUserSeeGroup(
+            group.id,
+            currentAnnouncementUser.id,
+            groupMetadataById,
+          ),
+      ).length,
+    [archivedGroups, currentAnnouncementUser.id, groupMetadataById],
+  );
+
+  useEffect(() => {
+    if (showArchived && visibleArchivedContactCount === 0) {
+      const timeoutId = window.setTimeout(() => {
+        setShowArchived(false);
+      }, 0);
+
+      return () => window.clearTimeout(timeoutId);
+    }
+  }, [showArchived, visibleArchivedContactCount]);
+
+  useEffect(() => {
+    if (showArchivedGroups && visibleArchivedGroupCount === 0) {
+      const timeoutId = window.setTimeout(() => {
+        setShowArchivedGroups(false);
+      }, 0);
+
+      return () => window.clearTimeout(timeoutId);
+    }
+  }, [showArchivedGroups, visibleArchivedGroupCount]);
+
   const forwardTargets = useMemo<ForwardTarget[]>(() => {
     const visibleForwardGroups = [...groups, ...archivedGroups].filter(
       (group) =>
@@ -5698,7 +5762,7 @@ export function UniparWorkspace({
                 onDeleteContact={handleDeleteContact}
                 showArchived={showArchived}
                 onToggleArchived={() => setShowArchived(!showArchived)}
-                archivedCount={archivedContacts.length}
+                archivedCount={visibleArchivedContactCount}
               />
             </div>
 
@@ -5885,7 +5949,7 @@ export function UniparWorkspace({
                 onToggleArchived={() =>
                   setShowArchivedGroups((currentValue) => !currentValue)
                 }
-                archivedCount={archivedGroups.length}
+                archivedCount={visibleArchivedGroupCount}
               />
             </div>
 

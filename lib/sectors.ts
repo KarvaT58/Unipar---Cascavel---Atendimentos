@@ -66,6 +66,12 @@ export const sectors = [
     description: "Laboratórios de Saúde",
   },
   {
+    code: "EST",
+    value: "est",
+    label: "EST - Esterilização",
+    description: "Esterilização",
+  },
+  {
     code: "AP",
     value: "ap",
     label: "AP - Administrador Predial",
@@ -113,17 +119,31 @@ export type Sector = (typeof sectors)[number]
 
 export const defaultSector = sectors[0]
 
+function normalizeSectorKey(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+}
+
 export const sectorLabels = sectors.reduce<
   Record<string, { code: string; name: string }>
 >((labels, sector) => {
-  labels[sector.value] = {
+  const label = {
     code: sector.code,
     name: sector.description,
   }
+
+  labels[sector.value] = label
+  labels[normalizeSectorKey(sector.value)] = label
+  labels[normalizeSectorKey(sector.code)] = label
+  labels[normalizeSectorKey(sector.label)] = label
+  labels[normalizeSectorKey(sector.description)] = label
 
   return labels
 }, {})
 
 export function getSectorLabel(value?: string | null) {
-  return sectorLabels[value ?? ""] ?? sectorLabels[defaultSector.value]
+  return sectorLabels[normalizeSectorKey(value ?? "")] ?? sectorLabels[defaultSector.value]
 }

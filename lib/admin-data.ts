@@ -12,6 +12,7 @@ export const SECTOR_OPTIONS = [
   "Odontologia",
   "Centro de Saúde Escola",
   "Laboratórios de Saúde",
+  "Esterilização",
   "Administrador Predial",
   "Patrimônio",
   "Monitoramento",

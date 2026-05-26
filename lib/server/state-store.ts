@@ -352,6 +352,7 @@ function toWorkspaceSector(sector: string): Sector {
     odt: "Odontologia",
     cse: "Centro de Saúde Escola",
     ls: "Laboratórios de Saúde",
+    est: "Esterilização",
     sju: "Serviço de Assistência Jurídica",
     mt: "Motorista",
   }

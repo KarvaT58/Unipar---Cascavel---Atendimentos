@@ -4,6 +4,7 @@ import { redirect } from "next/navigation"
 import { AppHeader } from "@/components/app-header"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+import { WorkspaceRouteSlot } from "@/components/workspace-route-slot"
 import type { Sector as WorkspaceSector } from "@/lib/admin-data"
 import { getSectorLabel } from "@/lib/sectors"
 import { getSessionUser } from "@/lib/session"
@@ -18,6 +19,7 @@ const serviceTicketSectorMap: Record<string, WorkspaceSector> = {
   cse: "Centro de Saúde Escola",
   dir: "Direção",
   fin: "Financeiro",
+  est: "Esterilização",
   ls: "Laboratórios de Saúde",
   man: "Manutenção",
   mnt: "Monitoramento",
@@ -45,6 +47,16 @@ export default async function AppLayout({
   }
 
   const currentSector = getSectorLabel(currentUser?.sector)
+  const workspaceUser = currentUser
+    ? {
+        id: currentUser.id,
+        name: currentUser.name,
+        email: currentUser.email,
+        sector: toServiceTicketSector(currentUser.sector),
+        isAdmin: currentUser.role === "ADMIN",
+        avatar: "",
+      }
+    : null
 
   return (
     <SidebarProvider>
@@ -64,7 +76,9 @@ export default async function AppLayout({
         <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-sidebar">
           <AppHeader />
           <div className="relative flex min-h-0 flex-1 flex-col gap-4 overflow-hidden rounded-xl bg-background px-4 pb-6 pt-5">
-            {children}
+            <WorkspaceRouteSlot initialUser={workspaceUser}>
+              {children}
+            </WorkspaceRouteSlot>
           </div>
         </div>
       </SidebarInset>

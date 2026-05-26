@@ -248,6 +248,7 @@ const sectorMap: Record<string, string> = {
   odt: "Odontologia",
   cse: "Centro de Saúde Escola",
   ls: "Laboratórios de Saúde",
+  est: "Esterilização",
   sju: "Serviço de Assistência Jurídica",
   mt: "Motorista",
 }
@@ -292,27 +293,29 @@ function getSectorByCode(code: string): Sector | undefined {
       return SECTOR_OPTIONS[9]
     case "ls":
       return SECTOR_OPTIONS[10]
+    case "est":
+      return "Esterilização"
     case "ap":
-      return SECTOR_OPTIONS[11]
-    case "pm":
       return SECTOR_OPTIONS[12]
-    case "mnt":
+    case "pm":
       return SECTOR_OPTIONS[13]
-    case "bb":
+    case "mnt":
       return SECTOR_OPTIONS[14]
-    case "sju":
+    case "bb":
       return SECTOR_OPTIONS[15]
-    case "mt":
+    case "sju":
       return SECTOR_OPTIONS[16]
-    case "fin":
+    case "mt":
       return SECTOR_OPTIONS[17]
-    case "rh":
+    case "fin":
       return SECTOR_OPTIONS[18]
-    case "com":
+    case "rh":
       return SECTOR_OPTIONS[19]
+    case "com":
+      return SECTOR_OPTIONS[20]
     case "mkt":
     case "marketing":
-      return SECTOR_OPTIONS[20]
+      return SECTOR_OPTIONS[21]
     default:
       return undefined
   }

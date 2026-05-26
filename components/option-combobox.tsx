@@ -84,6 +84,11 @@ const legacySectorDetails: Record<
     label: "MAN - Manutencao",
     description: "Manutencao",
   },
+  esterilizacao: {
+    code: "EST",
+    label: "EST - Esterilizacao",
+    description: "Esterilizacao",
+  },
 }
 
 function normalizeSectorKey(value: string) {
@@ -101,6 +106,7 @@ const legacySectorCodeAliases: Record<string, string> = {
   atendimento: "CAC",
   biblioteca: "BB",
   manutencao: "MAN",
+  esterilizacao: "EST",
 }
 
 function getSectorDetail(optionValue: string) {
@@ -149,6 +155,7 @@ const adminSectorValueByAccessSector = {
   odt: "Odontologia",
   cse: "Centro de Saúde Escola",
   ls: "Laboratórios de Saúde",
+  est: "Esterilização",
   ap: "Administrador Predial",
   pm: "Patrimônio",
   mnt: "Monitoramento",
