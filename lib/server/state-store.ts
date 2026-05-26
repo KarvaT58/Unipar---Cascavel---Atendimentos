@@ -65,6 +65,20 @@ function toJsonValue(state: AppState) {
   return JSON.parse(serializeAppState(state)) as Prisma.InputJsonValue
 }
 
+function omitEphemeralAppState(state: AppState): AppState {
+  return {
+    ...state,
+    typingIndicators: EMPTY_APP_STATE.typingIndicators,
+  }
+}
+
+function hasPersistentStateChange(firstState: AppState, secondState: AppState) {
+  return (
+    serializeAppState(omitEphemeralAppState(firstState)) !==
+    serializeAppState(omitEphemeralAppState(secondState))
+  )
+}
+
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -200,9 +214,28 @@ async function saveAppStateInDatabaseNow(
           const currentDocument = await tx.appStateDocument.findUnique({
             where: { key: STATE_KEY },
           })
+          const incomingStateToSave = omitEphemeralAppState(state)
+
+          if (currentDocument) {
+            const currentState = normalizeAppState(currentDocument.data)
+
+            if (!hasPersistentStateChange(currentState, state)) {
+              return {
+                state: {
+                  ...currentState,
+                  typingIndicators: state.typingIndicators,
+                },
+                revision: Number(currentDocument.revision),
+              }
+            }
+          }
+
           const stateToSave = currentDocument
-            ? mergeAppStates(normalizeAppState(currentDocument.data), state)
-            : state
+            ? mergeAppStates(
+                omitEphemeralAppState(normalizeAppState(currentDocument.data)),
+                incomingStateToSave
+              )
+            : incomingStateToSave
           const document = currentDocument
             ? await tx.appStateDocument.update({
                 where: { key: STATE_KEY },
