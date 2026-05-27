@@ -39,7 +39,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { AppState } from "@/lib/app-state"
-import type { AdminUser, Sector } from "@/lib/admin-data"
+import type { Sector } from "@/lib/admin-data"
 import {
   fetchBackendState,
   fetchCurrentSession,
@@ -75,18 +75,7 @@ type DashboardContentProps = {
   databaseError?: string
 }
 
-const dashboardChartColors = [
-  "#ff0018",
-  "#f97316",
-  "#22c55e",
-  "#f59e0b",
-  "#a78bfa",
-  "#14b8a6",
-  "#e879f9",
-  "#84cc16",
-  "#fb7185",
-  "#94a3b8",
-]
+const dashboardCurrentUserColor = "#ff0018"
 const DASHBOARD_CHART_MONTHS = 12
 
 const rangeOptions = [
@@ -268,7 +257,7 @@ export function DashboardContent({
                 Atendimentos resolvidos
               </CardTitle>
               <CardDescription>
-                Comparação mensal de {currentUserName} com colegas do {currentSectorLabel}
+                Atendimentos mensais de {currentUserName}
               </CardDescription>
             </div>
           </div>
@@ -408,22 +397,13 @@ function createDashboardData(
     subMonths(now, DASHBOARD_CHART_MONTHS - 1)
   )
   const tickets = state.serviceTickets
-  const participants = buildParticipants(
-    currentUser.id,
-    getDashboardSectorUsers(state.adminUsers, currentUser)
-  )
-  const participantUserIds = new Set(
-    participants
-      .map((participant) => participant.userId)
-      .filter((userId): userId is string => Boolean(userId))
-  )
+  const participants = buildParticipants(currentUser)
   const resolvedTickets = tickets
     .filter(
       (ticket) =>
         ticket.status === "completed" &&
         isOnOrAfter(ticket.closedAt, sinceChartStart) &&
-        Boolean(ticket.closedById) &&
-        participantUserIds.has(ticket.closedById ?? "")
+        isCurrentUserTicket(ticket.closedById, currentUser.id)
     )
     .map((ticket) => ({
       resolvedAt: ticket.closedAt ?? null,
@@ -466,56 +446,16 @@ function createDashboardData(
   }
 }
 
-function getDashboardSectorUsers(
-  adminUsers: AdminUser[],
-  currentUser: BackendAuthenticatedUser
-) {
-  const usersById = new Map<string, { id: string; name: string }>()
-
-  adminUsers
-    .filter(
-      (user) =>
-        user.status === "active" &&
-        user.sector === currentUser.sector
-    )
-    .forEach((user) => {
-      usersById.set(user.id, {
-        id: user.id,
-        name: user.name,
-      })
-    })
-
-  if (!usersById.has(currentUser.id)) {
-    usersById.set(currentUser.id, {
-      id: currentUser.id,
-      name: currentUser.name,
-    })
-  }
-
-  return Array.from(usersById.values()).sort((first, second) =>
-    first.name.localeCompare(second.name)
-  )
-}
-
 function buildParticipants(
-  currentUserId: string,
-  users: Array<{ id: string; name: string }>
+  currentUser: Pick<BackendAuthenticatedUser, "id" | "name">
 ): ChartParticipant[] {
-  const colleagues = users.filter((user) => user.id !== currentUserId)
-
   return [
     {
       key: "series_0",
-      name: "Você",
-      color: dashboardChartColors[0],
-      userId: currentUserId,
+      name: currentUser.name,
+      color: dashboardCurrentUserColor,
+      userId: currentUser.id,
     },
-    ...colleagues.map((user, index) => ({
-      key: `series_${index + 1}`,
-      name: getFirstName(user.name),
-      color: getChartColor(index + 1),
-      userId: user.id,
-    })),
   ]
 }
 
@@ -624,14 +564,6 @@ function toMonthKey(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, "0")
 
   return `${year}-${month}-01`
-}
-
-function getFirstName(name: string) {
-  return name.trim().split(/\s+/)[0] || name
-}
-
-function getChartColor(index: number) {
-  return dashboardChartColors[index] ?? `hsl(${(index * 47) % 360} 80% 62%)`
 }
 
 function getReferenceDate(chartData: ChartDataPoint[]) {

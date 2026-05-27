@@ -1,31 +1,13 @@
 import { DashboardContent } from "@/components/dashboard-content"
-import { SECTOR_OPTIONS, type AdminUser, type Sector } from "@/lib/admin-data"
+import { SECTOR_OPTIONS, type Sector } from "@/lib/admin-data"
 import { readAppState } from "@/lib/server/state-store"
 import { getSessionUser } from "@/lib/session"
 import type { ServiceTicket } from "@/lib/service-ticket-data"
 
 export const dynamic = "force-dynamic"
 
-const chartColors = [
-  "#ff0018",
-  "#f97316",
-  "#22c55e",
-  "#f59e0b",
-  "#a78bfa",
-  "#14b8a6",
-  "#e879f9",
-  "#84cc16",
-  "#fb7185",
-  "#94a3b8",
-]
+const currentUserChartColor = "#ff0018"
 const DASHBOARD_CHART_MONTHS = 12
-
-type DashboardUser = {
-  id: string
-  name: string
-  email: string
-  sector: string
-}
 
 type ChartParticipant = {
   key: string
@@ -53,9 +35,7 @@ async function getDashboardData() {
   }
 
   const currentSector = toWorkspaceSector(currentUser.sector)
-  const fallbackParticipants = buildParticipants(currentUser.id, [
-    { id: currentUser.id, name: currentUser.name },
-  ])
+  const fallbackParticipants = buildParticipants(currentUser)
   const fallback = createFallbackDashboardData({
     participants: fallbackParticipants,
     sectorLabel: currentSector,
@@ -70,23 +50,13 @@ async function getDashboardData() {
       subMonths(now, DASHBOARD_CHART_MONTHS - 1)
     )
     const tickets = state.serviceTickets
-    const sectorUsers = getDashboardSectorUsers(state.adminUsers, {
-      ...currentUser,
-      sector: currentSector,
-    })
-    const participants = buildParticipants(currentUser.id, sectorUsers)
-    const participantUserIds = new Set(
-      participants
-        .map((participant) => participant.userId)
-        .filter((userId): userId is string => Boolean(userId))
-    )
+    const participants = buildParticipants(currentUser)
     const resolvedTickets = tickets
       .filter(
         (ticket) =>
           ticket.status === "completed" &&
           isOnOrAfter(ticket.closedAt, sinceChartStart) &&
-          Boolean(ticket.closedById) &&
-          participantUserIds.has(ticket.closedById ?? "")
+          isCurrentUserTicket(ticket.closedById, currentUser.id)
       )
       .map((ticket) => ({
         resolvedAt: ticket.closedAt ?? null,
@@ -141,7 +111,7 @@ function createFallbackDashboardData(options?: {
     {
       key: "series_0",
       name: "Você",
-      color: chartColors[0],
+      color: currentUserChartColor,
     },
   ]
 
@@ -161,58 +131,16 @@ function createFallbackDashboardData(options?: {
 }
 
 function buildParticipants(
-  currentUserId: string,
-  users: Array<{ id: string; name: string }>
+  currentUser: { id: string; name: string }
 ): ChartParticipant[] {
-  const colleagues = users.filter((user) => user.id !== currentUserId)
-
-  const participants = [
+  return [
     {
       key: "series_0",
-      name: "Você",
-      color: chartColors[0],
-      userId: currentUserId,
-    },
-    ...colleagues.map((user, index) => ({
-      key: `series_${index + 1}`,
-      name: getFirstName(user.name),
-      color: getChartColor(index + 1),
-      userId: user.id,
-    })),
-  ]
-
-  return participants
-}
-
-function getDashboardSectorUsers(
-  adminUsers: AdminUser[],
-  currentUser: DashboardUser
-) {
-  const usersById = new Map<string, { id: string; name: string }>()
-
-  adminUsers
-    .filter(
-      (user) =>
-        user.status === "active" &&
-        user.sector === currentUser.sector
-    )
-    .forEach((user) => {
-      usersById.set(user.id, {
-        id: user.id,
-        name: user.name,
-      })
-    })
-
-  if (!usersById.has(currentUser.id)) {
-    usersById.set(currentUser.id, {
-      id: currentUser.id,
       name: currentUser.name,
-    })
-  }
-
-  return Array.from(usersById.values()).sort((first, second) =>
-    first.name.localeCompare(second.name)
-  )
+      color: currentUserChartColor,
+      userId: currentUser.id,
+    },
+  ]
 }
 
 function countTickets(
@@ -412,10 +340,3 @@ function toMonthKey(date: Date) {
   return `${year}-${month}-01`
 }
 
-function getFirstName(name: string) {
-  return name.trim().split(/\s+/)[0] || name
-}
-
-function getChartColor(index: number) {
-  return chartColors[index] ?? `hsl(${(index * 47) % 360} 80% 62%)`
-}
