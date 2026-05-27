@@ -225,6 +225,8 @@ export function LoansPage({
   const [selectedLoanId, setSelectedLoanId] = useState<string | null>(null);
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [isPostponeDatePickerOpen, setIsPostponeDatePickerOpen] =
+    useState(false);
   const [loanFormValues, setLoanFormValues] = useState<LoanFormValues>({
     title: "",
     description: "",
@@ -499,6 +501,7 @@ export function LoansPage({
 
     setPostponeLoanId(loan.id);
     setPostponeDate(getLoanDateKey(nextDate));
+    setIsPostponeDatePickerOpen(false);
     setPostponeReason("");
   };
 
@@ -537,8 +540,9 @@ export function LoansPage({
     setActiveFilter("postponed");
     setPostponeLoanId(null);
     setPostponeDate("");
+    setIsPostponeDatePickerOpen(false);
     setPostponeReason("");
-    toast.success("Devolucao adiada.");
+    toast.success("Devolução adiada.");
   };
 
   const markLoanAsReturned = () => {
@@ -568,6 +572,9 @@ export function LoansPage({
 
   const selectedDate = loanFormValues.requestedReturnDate
     ? parseLoanDate(loanFormValues.requestedReturnDate)
+    : undefined;
+  const selectedPostponeDate = postponeDate
+    ? parseLoanDate(postponeDate)
     : undefined;
   const loanNotificationSnapshot = useMemo(() => {
     void notificationReadVersion;
@@ -1061,7 +1068,10 @@ export function LoansPage({
       <Dialog
         open={Boolean(postponeLoan)}
         onOpenChange={(open) => {
-          if (!open) setPostponeLoanId(null);
+          if (!open) {
+            setPostponeLoanId(null);
+            setIsPostponeDatePickerOpen(false);
+          }
         }}
       >
         <DialogContent className="sm:max-w-md">
@@ -1073,14 +1083,43 @@ export function LoansPage({
               <div className="grid gap-4">
                 <div className="grid gap-2">
                   <Label htmlFor="loan-postpone-date">Nova data</Label>
-                  <Input
-                    id="loan-postpone-date"
-                    type="date"
-                    value={postponeDate}
-                    min={postponeLoan.requestedReturnDate}
-                    onChange={(event) => setPostponeDate(event.target.value)}
-                    className="h-10 bg-muted"
-                  />
+                  <Popover
+                    open={isPostponeDatePickerOpen}
+                    onOpenChange={setIsPostponeDatePickerOpen}
+                  >
+                    <PopoverTrigger asChild>
+                      <Button
+                        id="loan-postpone-date"
+                        type="button"
+                        variant="outline"
+                        className="h-10 justify-start bg-muted text-left font-normal"
+                      >
+                        <CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" />
+                        {selectedPostponeDate
+                          ? selectedPostponeDate.toLocaleDateString("pt-BR")
+                          : "Selecione a nova data"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        selected={selectedPostponeDate}
+                        disabled={(date) =>
+                          getStartOfDay(date).getTime() <=
+                          getStartOfDay(
+                            parseLoanDate(postponeLoan.requestedReturnDate),
+                          ).getTime()
+                        }
+                        locale={ptBR}
+                        onSelect={(date) => {
+                          if (!date) return;
+
+                          setPostponeDate(getLoanDateKey(date));
+                          setIsPostponeDatePickerOpen(false);
+                        }}
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="loan-postpone-reason">Motivo</Label>
