@@ -462,8 +462,43 @@ function hideConversationForUser(contact: Contact, userId: string): Contact {
 
 function getGroupMemberIds(metadata: GroupMetadata) {
   return Array.from(
-    new Set([...metadata.adminIds, ...metadata.participantIds]),
+    new Set(
+      [metadata.creatorId, ...metadata.adminIds, ...metadata.participantIds]
+        .filter(Boolean),
+    ),
   );
+}
+
+function normalizeGroupMetadata(metadata: GroupMetadata): GroupMetadata {
+  const creatorId =
+    metadata.creatorId ||
+    metadata.adminIds[0] ||
+    metadata.participantIds[0] ||
+    "";
+  const adminIds = Array.from(
+    new Set([...metadata.adminIds, ...(creatorId ? [creatorId] : [])]),
+  );
+  const participantIds = Array.from(
+    new Set([
+      ...(creatorId ? [creatorId] : []),
+      ...metadata.participantIds,
+      ...adminIds,
+    ]),
+  );
+
+  return {
+    ...metadata,
+    creatorId,
+    participantIds,
+    adminIds,
+  };
+}
+
+function touchGroupMetadata(metadata: GroupMetadata): GroupMetadata {
+  return normalizeGroupMetadata({
+    ...metadata,
+    updatedAt: new Date(),
+  });
 }
 
 function canUserSeeGroup(
@@ -2386,7 +2421,14 @@ export function UniparWorkspace({
         )
         .filter((user): user is DirectoryUser => user !== undefined)
     : [];
-  const selectedGroupAdminIds = selectedGroupMetadata?.adminIds ?? [];
+  const selectedGroupAdminIds = selectedGroupMetadata
+    ? Array.from(
+        new Set(
+          [selectedGroupMetadata.creatorId, ...selectedGroupMetadata.adminIds]
+            .filter(Boolean),
+        ),
+      )
+    : [];
   const canManageSelectedGroup =
     selectedGroup !== null &&
     selectedGroupMetadata !== undefined &&
@@ -4176,11 +4218,13 @@ export function UniparWorkspace({
     }));
     setGroupMetadataById((currentMetadata) => ({
       ...currentMetadata,
-      [newGroup.id]: {
-        participantIds: groupInput.participantIds,
+      [newGroup.id]: touchGroupMetadata({
+        participantIds: Array.from(
+          new Set([currentAnnouncementUser.id, ...groupInput.participantIds]),
+        ),
         adminIds: [currentAnnouncementUser.id],
         creatorId: currentAnnouncementUser.id,
-      },
+      }),
     }));
     setShowArchivedGroups(false);
     setSelectedGroup(newGroup);
@@ -4200,12 +4244,16 @@ export function UniparWorkspace({
   const handleAddGroupParticipants = (participantIds: string[]) => {
     if (!selectedGroup || !canManageSelectedGroup) return;
 
+    const currentMemberIds = new Set(
+      selectedGroupMetadata ? getGroupMemberIds(selectedGroupMetadata) : [],
+    );
     const nextParticipantIds = participantIds.filter((participantId) =>
-      directoryUsers.some((user) => user.id === participantId),
+      directoryUsers.some((user) => user.id === participantId) &&
+      !currentMemberIds.has(participantId),
     );
 
     if (nextParticipantIds.length === 0) {
-      toast.error("Selecione ao menos um participante.");
+      toast.error("Selecione ao menos um novo participante.");
       return;
     }
 
@@ -4216,17 +4264,24 @@ export function UniparWorkspace({
         creatorId: currentAnnouncementUser.id,
       };
 
+      const currentMemberIds = new Set(getGroupMemberIds(currentGroupMetadata));
+      const participantIdsToAdd = nextParticipantIds.filter(
+        (participantId) => !currentMemberIds.has(participantId),
+      );
+
+      if (participantIdsToAdd.length === 0) return currentMetadata;
+
       return {
         ...currentMetadata,
-        [selectedGroup.id]: {
+        [selectedGroup.id]: touchGroupMetadata({
           ...currentGroupMetadata,
           participantIds: Array.from(
             new Set([
               ...currentGroupMetadata.participantIds,
-              ...nextParticipantIds,
+              ...participantIdsToAdd,
             ]),
           ),
-        },
+        }),
       };
     });
     toast.success(
@@ -4239,14 +4294,27 @@ export function UniparWorkspace({
   const handleRemoveGroupParticipant = (participantId: string) => {
     if (!selectedGroup || !canManageSelectedGroup) return;
 
+    if (selectedGroupMetadata?.creatorId === participantId) {
+      toast.error("O criador do grupo nao pode ser removido.");
+      return;
+    }
+
+    if (participantId === currentAnnouncementUser.id) {
+      toast.error("Use a acao de sair do grupo para remover sua propria conta.");
+      return;
+    }
+
     setGroupMetadataById((currentMetadata) => {
       const currentGroupMetadata = currentMetadata[selectedGroup.id];
 
       if (!currentGroupMetadata) return currentMetadata;
+      if (currentGroupMetadata.creatorId === participantId) {
+        return currentMetadata;
+      }
 
       return {
         ...currentMetadata,
-        [selectedGroup.id]: {
+        [selectedGroup.id]: touchGroupMetadata({
           ...currentGroupMetadata,
           participantIds: currentGroupMetadata.participantIds.filter(
             (currentParticipantId) => currentParticipantId !== participantId,
@@ -4254,7 +4322,7 @@ export function UniparWorkspace({
           adminIds: currentGroupMetadata.adminIds.filter(
             (currentAdminId) => currentAdminId !== participantId,
           ),
-        },
+        }),
       };
     });
     toast.success("Participante removido.");
@@ -4265,6 +4333,24 @@ export function UniparWorkspace({
 
     const wasAdmin =
       selectedGroupMetadata?.adminIds.includes(participantId) ?? false;
+    const selectedGroupMemberIds = selectedGroupMetadata
+      ? getGroupMemberIds(selectedGroupMetadata)
+      : [];
+
+    if (!selectedGroupMemberIds.includes(participantId)) {
+      toast.error("Esse usuario nao faz parte do grupo.");
+      return;
+    }
+
+    if (selectedGroupMetadata?.creatorId === participantId && wasAdmin) {
+      toast.error("O criador do grupo precisa continuar como admin.");
+      return;
+    }
+
+    if (wasAdmin && (selectedGroupMetadata?.adminIds.length ?? 0) <= 1) {
+      toast.error("O grupo precisa ter ao menos um admin.");
+      return;
+    }
 
     setGroupMetadataById((currentMetadata) => {
       const currentGroupMetadata = currentMetadata[selectedGroup.id];
@@ -4272,17 +4358,28 @@ export function UniparWorkspace({
       if (!currentGroupMetadata) return currentMetadata;
 
       const isAdmin = currentGroupMetadata.adminIds.includes(participantId);
+      if (isAdmin && currentGroupMetadata.creatorId === participantId) {
+        return currentMetadata;
+      }
+      if (isAdmin && currentGroupMetadata.adminIds.length <= 1) {
+        return currentMetadata;
+      }
 
       return {
         ...currentMetadata,
-        [selectedGroup.id]: {
+        [selectedGroup.id]: touchGroupMetadata({
           ...currentGroupMetadata,
           adminIds: isAdmin
             ? currentGroupMetadata.adminIds.filter(
                 (currentAdminId) => currentAdminId !== participantId,
               )
-            : [...currentGroupMetadata.adminIds, participantId],
-        },
+            : Array.from(
+                new Set([...currentGroupMetadata.adminIds, participantId]),
+              ),
+          participantIds: Array.from(
+            new Set([...currentGroupMetadata.participantIds, participantId]),
+          ),
+        }),
       };
     });
     toast.success(
@@ -6070,6 +6167,7 @@ export function UniparWorkspace({
                           isGroup
                           groupParticipants={selectedGroupParticipants}
                           groupAdminIds={selectedGroupAdminIds}
+                          groupCreatorId={selectedGroupMetadata?.creatorId}
                           availableParticipants={directoryUsers}
                           canEditGroup={canManageSelectedGroup}
                           onClose={handleCloseSidePanel}

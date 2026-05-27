@@ -76,6 +76,7 @@ interface ContactDetailsProps {
   isGroup?: boolean;
   groupParticipants?: DirectoryUser[];
   groupAdminIds?: string[];
+  groupCreatorId?: string;
   availableParticipants?: DirectoryUser[];
   canEditGroup?: boolean;
   onClose: () => void;
@@ -827,6 +828,8 @@ function LinksContent({
 function GroupParticipantsSection({
   participants,
   adminIds,
+  creatorId,
+  currentUserId,
   availableParticipants,
   canEdit,
   onAddParticipants,
@@ -835,6 +838,8 @@ function GroupParticipantsSection({
 }: {
   participants: DirectoryUser[];
   adminIds: string[];
+  creatorId?: string;
+  currentUserId: string;
   availableParticipants: DirectoryUser[];
   canEdit: boolean;
   onAddParticipants?: (participantIds: string[]) => void;
@@ -947,6 +952,11 @@ function GroupParticipantsSection({
         <div className="space-y-1">
           {visibleParticipants.map((participant) => {
             const isAdmin = adminIds.includes(participant.id);
+            const isCreator = participant.id === creatorId;
+            const canToggleAdmin =
+              !isAdmin || (!isCreator && adminIds.length > 1);
+            const canRemoveParticipant =
+              !isCreator && participant.id !== currentUserId;
             const participantPresence = getChatPresenceMeta(participant);
 
             return (
@@ -981,6 +991,11 @@ function GroupParticipantsSection({
                         Admin
                       </span>
                     )}
+                    {isCreator && (
+                      <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                        Criador
+                      </span>
+                    )}
                   </div>
                   <p className="truncate text-xs text-muted-foreground">
                     {participant.email}
@@ -1010,6 +1025,7 @@ function GroupParticipantsSection({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-48">
                       <DropdownMenuItem
+                        disabled={!canToggleAdmin}
                         onClick={() =>
                           onToggleParticipantAdmin?.(participant.id)
                         }
@@ -1024,6 +1040,7 @@ function GroupParticipantsSection({
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         variant="destructive"
+                        disabled={!canRemoveParticipant}
                         onClick={() => setRemoveParticipant(participant)}
                       >
                         <UserMinus className="mr-2 h-4 w-4" />
@@ -1183,6 +1200,7 @@ export function ContactDetails({
   isGroup = false,
   groupParticipants = [],
   groupAdminIds = [],
+  groupCreatorId,
   availableParticipants = [],
   canEditGroup = false,
   onClose,
@@ -1498,6 +1516,8 @@ export function ContactDetails({
               <GroupParticipantsSection
                 participants={groupParticipants}
                 adminIds={groupAdminIds}
+                creatorId={groupCreatorId}
+                currentUserId={currentUser.id}
                 availableParticipants={availableParticipants}
                 canEdit={canEditGroup}
                 onAddParticipants={onAddGroupParticipants}

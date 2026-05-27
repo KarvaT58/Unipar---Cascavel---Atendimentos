@@ -19,6 +19,7 @@ export interface GroupMetadataState {
   participantIds: string[];
   adminIds: string[];
   creatorId: string;
+  updatedAt?: Date;
 }
 
 export interface TypingIndicatorState {
@@ -329,6 +330,82 @@ function mergeContactBuckets(
   };
 }
 
+function normalizeGroupMetadata(metadata: GroupMetadataState) {
+  const creatorId =
+    metadata.creatorId ||
+    metadata.adminIds[0] ||
+    metadata.participantIds[0] ||
+    "";
+  const adminIds = mergeStringLists(
+    metadata.adminIds,
+    creatorId ? [creatorId] : [],
+  );
+  const participantIds = mergeStringLists(metadata.participantIds, adminIds);
+
+  return {
+    ...metadata,
+    creatorId,
+    participantIds,
+    adminIds,
+  };
+}
+
+function getGroupMetadataFreshnessTime(metadata: GroupMetadataState) {
+  return metadata.updatedAt?.getTime();
+}
+
+function getFreshestGroupMetadata(
+  storedMetadata: GroupMetadataState,
+  incomingMetadata: GroupMetadataState,
+) {
+  const storedUpdatedAt = getGroupMetadataFreshnessTime(storedMetadata);
+  const incomingUpdatedAt = getGroupMetadataFreshnessTime(incomingMetadata);
+
+  if (incomingUpdatedAt === undefined && storedUpdatedAt !== undefined) {
+    return storedMetadata;
+  }
+
+  if (incomingUpdatedAt !== undefined && storedUpdatedAt !== undefined) {
+    return incomingUpdatedAt >= storedUpdatedAt
+      ? incomingMetadata
+      : storedMetadata;
+  }
+
+  return incomingMetadata;
+}
+
+function mergeGroupMetadataCollections(
+  storedMetadataById: Record<string, GroupMetadataState>,
+  incomingMetadataById: Record<string, GroupMetadataState>,
+) {
+  const groupIds = new Set([
+    ...Object.keys(storedMetadataById),
+    ...Object.keys(incomingMetadataById),
+  ]);
+
+  return Object.fromEntries(
+    Array.from(groupIds).map((groupId) => {
+      const storedMetadata = storedMetadataById[groupId];
+      const incomingMetadata = incomingMetadataById[groupId];
+
+      if (!storedMetadata) {
+        return [groupId, normalizeGroupMetadata(incomingMetadata)];
+      }
+
+      if (!incomingMetadata) {
+        return [groupId, normalizeGroupMetadata(storedMetadata)];
+      }
+
+      return [
+        groupId,
+        normalizeGroupMetadata(
+          getFreshestGroupMetadata(storedMetadata, incomingMetadata),
+        ),
+      ];
+    }),
+  );
+}
+
 function sortAppPageRecordList(records: AppPageRecord[]) {
   return [...records].sort(
     (firstRecord, secondRecord) =>
@@ -606,10 +683,10 @@ export function mergeAppStates(
       storedState.groupMessagesByContact,
       incomingState.groupMessagesByContact,
     ),
-    groupMetadataById: {
-      ...storedState.groupMetadataById,
-      ...incomingState.groupMetadataById,
-    },
+    groupMetadataById: mergeGroupMetadataCollections(
+      storedState.groupMetadataById,
+      incomingState.groupMetadataById,
+    ),
     serviceTickets: mergeServiceTickets(
       storedState.serviceTickets,
       incomingState.serviceTickets,
