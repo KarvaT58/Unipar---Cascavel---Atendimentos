@@ -4,6 +4,8 @@ import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
   EllipsisVerticalIcon,
   MessageCircleIcon,
   SearchIcon,
@@ -70,6 +72,7 @@ type TeamDirectoryProps = {
 }
 
 const allFilterValue = "all"
+const teamUsersPageSize = 10
 const sectorFilterOptions = [
   {
     value: allFilterValue,
@@ -97,6 +100,7 @@ export function TeamDirectory({ users }: TeamDirectoryProps) {
   const [search, setSearch] = React.useState("")
   const [sectorFilter, setSectorFilter] = React.useState(allFilterValue)
   const [roleFilter, setRoleFilter] = React.useState(allFilterValue)
+  const [page, setPage] = React.useState(1)
   const [presenceNow, setPresenceNow] = React.useState(() => Date.now())
 
   React.useEffect(() => {
@@ -146,6 +150,15 @@ export function TeamDirectory({ users }: TeamDirectoryProps) {
       return matchesName && matchesSector && matchesRole
     })
   }, [roleFilter, search, sectorFilter, users])
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredUsers.length / teamUsersPageSize)
+  )
+  const safePage = Math.min(page, totalPages)
+  const paginatedUsers = filteredUsers.slice(
+    (safePage - 1) * teamUsersPageSize,
+    safePage * teamUsersPageSize
+  )
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg bg-background">
@@ -165,7 +178,10 @@ export function TeamDirectory({ users }: TeamDirectoryProps) {
                 <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={search}
-                  onChange={(event) => setSearch(event.target.value)}
+                  onChange={(event) => {
+                    setSearch(event.target.value)
+                    setPage(1)
+                  }}
                   placeholder="Buscar por nome"
                   className="pl-8"
                 />
@@ -173,9 +189,10 @@ export function TeamDirectory({ users }: TeamDirectoryProps) {
 
               <OptionCombobox
                 value={sectorFilter}
-                onValueChange={(value) =>
+                onValueChange={(value) => {
                   setSectorFilter(value ?? allFilterValue)
-                }
+                  setPage(1)
+                }}
                 options={sectorFilterOptions}
                 placeholder="Todos os setores"
                 showClear={false}
@@ -183,9 +200,10 @@ export function TeamDirectory({ users }: TeamDirectoryProps) {
 
               <Select
                 value={roleFilter}
-                onValueChange={(value) =>
+                onValueChange={(value) => {
                   setRoleFilter(value ?? allFilterValue)
-                }
+                  setPage(1)
+                }}
               >
                 <SelectTrigger aria-label="Filtrar por perfil">
                   <SelectValue placeholder="Todos os perfis" />
@@ -219,7 +237,7 @@ export function TeamDirectory({ users }: TeamDirectoryProps) {
                 <span>Setor</span>
                 <span />
               </div>
-              {filteredUsers.map((user) => (
+              {paginatedUsers.map((user) => (
                 <TeamUserRow
                   key={user.id}
                   user={user}
@@ -240,6 +258,38 @@ export function TeamDirectory({ users }: TeamDirectoryProps) {
             </div>
           )}
         </CardContent>
+
+        <div className="flex items-center justify-between gap-3 border-t px-3 py-2 text-sm">
+          <span className="text-xs text-muted-foreground">PÃ¡gina</span>
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              aria-label="PÃ¡gina anterior"
+              disabled={safePage <= 1}
+              onClick={() => setPage(safePage - 1)}
+            >
+              <ChevronLeftIcon />
+            </Button>
+            <span className="flex h-7 min-w-10 items-center justify-center rounded-md border bg-muted/30 px-2 text-sm font-semibold tabular-nums">
+              {safePage}
+            </span>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              aria-label="PrÃ³xima pÃ¡gina"
+              disabled={safePage >= totalPages}
+              onClick={() => setPage(safePage + 1)}
+            >
+              <ChevronRightIcon />
+            </Button>
+            <span className="ml-1 text-xs text-muted-foreground">
+              de {totalPages}
+            </span>
+          </div>
+        </div>
       </Card>
     </section>
   )
