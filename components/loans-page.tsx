@@ -40,6 +40,7 @@ import {
 import { Textarea } from "@/components/unipar-ui/textarea";
 import { ptBR } from "date-fns/locale";
 import {
+  BellRing,
   CalendarDays,
   CheckCircle2,
   HandCoins,
@@ -63,6 +64,13 @@ import {
   type LoanFilter,
   type LoanRequest,
 } from "@/lib/loan-data";
+import {
+  LOAN_NOTIFICATION_EVENT,
+  getLoanNotificationReadStorageKey,
+  getLoanNotificationSnapshot,
+  markLoanNotificationKeysRead,
+  readLoanNotificationReadKeys,
+} from "@/lib/loan-notifications";
 import {
   getUploadSizeLimitMessage,
   splitFilesByUploadSize,
@@ -125,6 +133,26 @@ function getLoanStatusVariant(status: LoanFilter) {
   if (status === "history") return "secondary";
 
   return "outline";
+}
+
+function LoanNotificationBadge({ count }: { count: number }) {
+  if (count <= 0) {
+    return null;
+  }
+
+  const displayCount = count > 99 ? "99+" : String(count);
+  const notificationLabel = count === 1 ? "notificação" : "notificações";
+
+  return (
+    <span
+      aria-label={`${count} ${notificationLabel} neste empréstimo`}
+      className="inline-flex h-6 shrink-0 items-center gap-1 rounded-full bg-primary px-2 text-[11px] font-bold leading-none text-primary-foreground shadow-sm"
+      title={`${count} ${notificationLabel} neste empréstimo`}
+    >
+      <BellRing className="h-3.5 w-3.5" />
+      {displayCount}
+    </span>
+  );
 }
 
 function getAttachmentKind(file: File): LoanAttachment["kind"] {
@@ -213,6 +241,7 @@ export function LoansPage({
   const [postponeDate, setPostponeDate] = useState("");
   const [postponeReason, setPostponeReason] = useState("");
   const [returnLoan, setReturnLoan] = useState<LoanRequest | null>(null);
+  const [notificationReadVersion, setNotificationReadVersion] = useState(0);
 
   const selectedLoan = selectedLoanId
     ? loans.find((loan) => loan.id === selectedLoanId) ?? null
@@ -540,6 +569,71 @@ export function LoansPage({
   const selectedDate = loanFormValues.requestedReturnDate
     ? parseLoanDate(loanFormValues.requestedReturnDate)
     : undefined;
+  const loanNotificationSnapshot = useMemo(() => {
+    void notificationReadVersion;
+
+    const readKeys = readLoanNotificationReadKeys(currentUser.id);
+
+    return getLoanNotificationSnapshot(
+      loans,
+      {
+        id: currentUser.id,
+        sector: currentUserSector,
+      },
+      readKeys,
+    );
+  }, [currentUser.id, currentUserSector, loans, notificationReadVersion]);
+
+  const markLoanNotificationsAsSeen = (loanId: string) => {
+    const unreadKeys =
+      loanNotificationSnapshot.keysByLoan[loanId]?.filter((key) =>
+        loanNotificationSnapshot.unreadKeys.has(key),
+      ) ?? [];
+
+    const didChange = markLoanNotificationKeysRead(currentUser.id, unreadKeys);
+
+    if (didChange) {
+      setNotificationReadVersion((version) => version + 1);
+    }
+  };
+
+  const openLoanDetails = (loanId: string) => {
+    setSelectedLoanId(loanId);
+    markLoanNotificationsAsSeen(loanId);
+  };
+
+  useEffect(() => {
+    if (!selectedLoan) return;
+
+    const timeoutId = window.setTimeout(() => {
+      markLoanNotificationsAsSeen(selectedLoan.id);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [loanNotificationSnapshot, selectedLoan]);
+
+  useEffect(() => {
+    const readStorageKey = getLoanNotificationReadStorageKey(currentUser.id);
+    const handleNotificationsChanged = () => {
+      setNotificationReadVersion((version) => version + 1);
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === readStorageKey) {
+        handleNotificationsChanged();
+      }
+    };
+
+    window.addEventListener(LOAN_NOTIFICATION_EVENT, handleNotificationsChanged);
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener(
+        LOAN_NOTIFICATION_EVENT,
+        handleNotificationsChanged,
+      );
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [currentUser.id]);
 
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-lg border bg-background">
@@ -601,6 +695,8 @@ export function LoansPage({
           <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
             {paginatedLoans.map((loan) => {
               const status = getLoanOperationalStatus(loan);
+              const notificationCount =
+                loanNotificationSnapshot.unreadByLoan[loan.id] ?? 0;
 
               return (
                 <article
@@ -616,6 +712,7 @@ export function LoansPage({
                         <h2 className="min-w-0 flex-1 break-words font-semibold">
                           {loan.title}
                         </h2>
+                        <LoanNotificationBadge count={notificationCount} />
                         <Badge variant={getLoanStatusVariant(status)}>
                           {getLoanStatusLabel(loan)}
                         </Badge>
@@ -659,7 +756,7 @@ export function LoansPage({
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => setSelectedLoanId(loan.id)}
+                      onClick={() => openLoanDetails(loan.id)}
                     >
                       Detalhes
                     </Button>

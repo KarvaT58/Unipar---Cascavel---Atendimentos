@@ -34,9 +34,16 @@ import {
   type Message,
 } from "@/lib/chat-data"
 import {
+  LOAN_NOTIFICATION_EVENT,
+  getLoanNotificationSnapshot,
+  readLoanNotificationReadKeys,
+  readLoanNotificationSoundKeys,
+  writeLoanNotificationPendingKeys,
+  writeLoanNotificationSoundKeys,
+} from "@/lib/loan-notifications"
+import {
   SERVICE_TICKET_NOTIFICATION_EVENT,
   getServiceTicketNotificationSnapshot,
-  readServiceTicketNotificationPendingKeys,
   readServiceTicketNotificationReadKeys,
   readServiceTicketNotificationSoundKeys,
   writeServiceTicketNotificationPendingKeys,
@@ -157,6 +164,7 @@ export function AppSidebar({
   const [pendingAccessRequests, setPendingAccessRequests] = React.useState(0)
   const [serviceTicketNotificationCount, setServiceTicketNotificationCount] =
     React.useState(0)
+  const [loanNotificationCount, setLoanNotificationCount] = React.useState(0)
   const [chatNotificationCount, setChatNotificationCount] = React.useState(0)
   const [groupNotificationCount, setGroupNotificationCount] = React.useState(0)
   const [sidebarUserProfile, setSidebarUserProfile] =
@@ -167,9 +175,12 @@ export function AppSidebar({
     }))
   const latestAppStateRef = React.useRef<AppState | null>(null)
   const serviceTicketNotificationBaselineUserIdRef = React.useRef("")
+  const loanNotificationBaselineUserIdRef = React.useRef("")
   const serviceTicketNotificationCountRef = React.useRef(0)
+  const loanNotificationCountRef = React.useRef(0)
   const chatNotificationCountsRef = React.useRef({ chat: 0, groups: 0 })
   const serviceTicketUnreadKeysRef = React.useRef<Set<string>>(new Set())
+  const loanUnreadKeysRef = React.useRef<Set<string>>(new Set())
   const serviceTicketNotificationRefreshIdRef = React.useRef(0)
   const notificationAudioRef = React.useRef<HTMLAudioElement | null>(null)
   const pendingNotificationSoundRef = React.useRef(false)
@@ -237,6 +248,20 @@ export function AppSidebar({
     commitServiceTicketNotificationCount(0)
   }, [commitServiceTicketNotificationCount])
 
+  const commitLoanNotificationCount = React.useCallback((count: number) => {
+    if (loanNotificationCountRef.current === count) {
+      return
+    }
+
+    loanNotificationCountRef.current = count
+    setLoanNotificationCount(count)
+  }, [])
+
+  const clearLoanNotificationCount = React.useCallback(() => {
+    loanUnreadKeysRef.current = new Set()
+    commitLoanNotificationCount(0)
+  }, [commitLoanNotificationCount])
+
   const commitChatNotificationCounts = React.useCallback(
     (counts: { chat: number; groups: number }) => {
       if (
@@ -300,7 +325,9 @@ export function AppSidebar({
       try {
         if (!currentNotificationUser) {
           serviceTicketNotificationBaselineUserIdRef.current = ""
+          loanNotificationBaselineUserIdRef.current = ""
           clearServiceTicketNotificationCount()
+          clearLoanNotificationCount()
           clearChatNotificationCounts()
           return
         }
@@ -336,29 +363,30 @@ export function AppSidebar({
           currentNotificationUser,
           readKeys
         )
+        const loanReadKeys = readLoanNotificationReadKeys(
+          currentNotificationUser.id
+        )
+        const loanSnapshot = getLoanNotificationSnapshot(
+          state.loanRequests,
+          currentNotificationUser,
+          loanReadKeys
+        )
         const isNewNotificationUser =
           serviceTicketNotificationBaselineUserIdRef.current !==
           currentNotificationUser.id
+        const isNewLoanNotificationUser =
+          loanNotificationBaselineUserIdRef.current !== currentNotificationUser.id
 
         if (isNewNotificationUser) {
           serviceTicketNotificationBaselineUserIdRef.current =
             currentNotificationUser.id
-          const pendingKeys = readServiceTicketNotificationPendingKeys(
-            currentNotificationUser.id
-          )
-          const activePendingKeys = new Set(
-            Array.from(pendingKeys).filter(
-              (key) => snapshot.unreadKeys.has(key) && snapshot.allKeys.has(key)
-            )
-          )
-
-          serviceTicketUnreadKeysRef.current = activePendingKeys
+          serviceTicketUnreadKeysRef.current = new Set(snapshot.unreadKeys)
           commitServiceTicketNotificationCount(
             serviceTicketUnreadKeysRef.current.size
           )
           writeServiceTicketNotificationPendingKeys(
             currentNotificationUser.id,
-            activePendingKeys
+            serviceTicketUnreadKeysRef.current
           )
           writeServiceTicketNotificationSoundKeys(
             currentNotificationUser.id,
@@ -369,16 +397,30 @@ export function AppSidebar({
               ...snapshot.allKeys,
             ])
           )
+        }
+
+        if (isNewLoanNotificationUser) {
+          loanNotificationBaselineUserIdRef.current = currentNotificationUser.id
+          loanUnreadKeysRef.current = new Set(loanSnapshot.unreadKeys)
+          commitLoanNotificationCount(loanUnreadKeysRef.current.size)
+          writeLoanNotificationPendingKeys(
+            currentNotificationUser.id,
+            loanUnreadKeysRef.current
+          )
+          writeLoanNotificationSoundKeys(
+            currentNotificationUser.id,
+            new Set([
+              ...readLoanNotificationSoundKeys(currentNotificationUser.id),
+              ...loanSnapshot.allKeys,
+            ])
+          )
+        }
+
+        if (isNewNotificationUser || isNewLoanNotificationUser) {
           return
         }
 
-        const stableUnreadKeys = serviceTicketUnreadKeysRef.current
-
-        Array.from(stableUnreadKeys).forEach((key) => {
-          if (readKeys.has(key) || !snapshot.allKeys.has(key)) {
-            stableUnreadKeys.delete(key)
-          }
-        })
+        const stableUnreadKeys = new Set(snapshot.unreadKeys)
         const soundKeys = readServiceTicketNotificationSoundKeys(
           currentNotificationUser.id
         )
@@ -386,7 +428,7 @@ export function AppSidebar({
           (key) => !soundKeys.has(key)
         )
 
-        newUnreadKeys.forEach((key) => stableUnreadKeys.add(key))
+        serviceTicketUnreadKeysRef.current = stableUnreadKeys
         commitServiceTicketNotificationCount(stableUnreadKeys.size)
         writeServiceTicketNotificationPendingKeys(
           currentNotificationUser.id,
@@ -399,7 +441,30 @@ export function AppSidebar({
           knownKeys
         )
 
-        if (shouldPlaySound && newUnreadKeys.length > 0) {
+        const stableLoanUnreadKeys = new Set(loanSnapshot.unreadKeys)
+        const loanSoundKeys = readLoanNotificationSoundKeys(
+          currentNotificationUser.id
+        )
+        const newLoanUnreadKeys = Array.from(loanSnapshot.unreadKeys).filter(
+          (key) => !loanSoundKeys.has(key)
+        )
+
+        loanUnreadKeysRef.current = stableLoanUnreadKeys
+        commitLoanNotificationCount(stableLoanUnreadKeys.size)
+        writeLoanNotificationPendingKeys(
+          currentNotificationUser.id,
+          stableLoanUnreadKeys
+        )
+
+        writeLoanNotificationSoundKeys(
+          currentNotificationUser.id,
+          new Set([...loanSoundKeys, ...loanSnapshot.allKeys])
+        )
+
+        if (
+          shouldPlaySound &&
+          (newUnreadKeys.length > 0 || newLoanUnreadKeys.length > 0)
+        ) {
           playServiceTicketNotificationSound()
         }
       } catch {
@@ -408,8 +473,10 @@ export function AppSidebar({
     },
     [
       clearChatNotificationCounts,
+      clearLoanNotificationCount,
       clearServiceTicketNotificationCount,
       commitChatNotificationCounts,
+      commitLoanNotificationCount,
       commitServiceTicketNotificationCount,
       currentNotificationUser,
       playServiceTicketNotificationSound,
@@ -443,7 +510,10 @@ export function AppSidebar({
     }
 
     const handleStorage = (event: StorageEvent) => {
-      if (event.key?.startsWith("service-ticket-notifications-read:")) {
+      if (
+        event.key?.startsWith("service-ticket-notifications-read:") ||
+        event.key?.startsWith("loan-notifications-read:")
+      ) {
         void refreshServiceTicketNotifications({ fetchState: false })
       }
     }
@@ -460,6 +530,7 @@ export function AppSidebar({
       SERVICE_TICKET_NOTIFICATION_EVENT,
       handleNotificationsChanged
     )
+    window.addEventListener(LOAN_NOTIFICATION_EVENT, handleNotificationsChanged)
     window.addEventListener("storage", handleStorage)
     document.addEventListener("visibilitychange", handleVisibilityRefresh)
     window.addEventListener("focus", handleFocusRefresh)
@@ -470,6 +541,10 @@ export function AppSidebar({
       eventSource.close()
       window.removeEventListener(
         SERVICE_TICKET_NOTIFICATION_EVENT,
+        handleNotificationsChanged
+      )
+      window.removeEventListener(
+        LOAN_NOTIFICATION_EVENT,
         handleNotificationsChanged
       )
       window.removeEventListener("storage", handleStorage)
@@ -510,9 +585,19 @@ export function AppSidebar({
                   : "notificações"
               } de atendimento`,
             }
+          : item.url === "/emprestimos" && loanNotificationCount > 0
+            ? {
+                ...item,
+                badgeCount: loanNotificationCount,
+                badgeLabel: `${loanNotificationCount} ${
+                  loanNotificationCount === 1
+                    ? "notificação"
+                    : "notificações"
+                } de empréstimos`,
+              }
           : item
       ),
-    [serviceTicketNotificationCount]
+    [loanNotificationCount, serviceTicketNotificationCount]
   )
 
   const sidebarMainItems = React.useMemo(
