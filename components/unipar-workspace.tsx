@@ -461,6 +461,45 @@ function hideConversationForUser(contact: Contact, userId: string): Contact {
   };
 }
 
+function getConversationStateForUser(contact: Contact, userId: string) {
+  const userPreference = userId
+    ? contact.conversationPreferencesByUserId?.[userId]
+    : undefined;
+
+  return {
+    isMuted: userPreference?.isMuted ?? contact.isMuted,
+    isPinned: userPreference?.isPinned ?? contact.isPinned,
+  };
+}
+
+function hydrateConversationStateForUser(contact: Contact, userId: string) {
+  return {
+    ...contact,
+    ...getConversationStateForUser(contact, userId),
+  };
+}
+
+function updateConversationPreferenceForUser(
+  contact: Contact,
+  userId: string,
+  updates: Partial<Pick<Contact, "isMuted" | "isPinned">>,
+): Contact {
+  const currentPreference =
+    contact.conversationPreferencesByUserId?.[userId];
+
+  return {
+    ...contact,
+    conversationPreferencesByUserId: {
+      ...(contact.conversationPreferencesByUserId ?? {}),
+      [userId]: {
+        ...currentPreference,
+        ...updates,
+        updatedAt: new Date(),
+      },
+    },
+  };
+}
+
 function getGroupMemberIds(metadata: GroupMetadata) {
   return Array.from(
     new Set(
@@ -2211,9 +2250,13 @@ export function UniparWorkspace({
               !isMessageHiddenForUser(message, currentAnnouncementUser.id),
           );
           const typingText = getGroupTypingText(group.id);
+          const groupWithUserState = hydrateConversationStateForUser(
+            group,
+            currentAnnouncementUser.id,
+          );
 
           return {
-            ...buildContactSummary(group, visibleGroupMessages),
+            ...buildContactSummary(groupWithUserState, visibleGroupMessages),
             unreadCount: getUnreadGroupCount(group.id),
             isTyping: Boolean(typingText),
             typingText,
@@ -3513,21 +3556,32 @@ export function UniparWorkspace({
     const willMute = !(contact?.isMuted ?? false);
     const mutedContact = toOwnedDirectContact(contact, {
       isMuted: willMute,
+      conversationStateUpdatedAt: new Date(),
     });
 
     setContacts((currentContacts) =>
-      upsertDirectContactForCurrentUser(currentContacts, mutedContact),
+      mutedContact.isArchived
+        ? currentContacts.filter(
+            (currentContact) =>
+              !isStoredDirectContactForCurrentUser(currentContact, contactId),
+          )
+        : upsertDirectContactForCurrentUser(currentContacts, mutedContact),
     );
     setArchivedContacts((currentContacts) =>
-      currentContacts.some((currentContact) =>
-        isStoredDirectContactForCurrentUser(currentContact, contactId),
-      )
+      mutedContact.isArchived
         ? upsertDirectContactForCurrentUser(currentContacts, mutedContact)
-        : currentContacts,
+        : currentContacts.filter(
+            (currentContact) =>
+              !isStoredDirectContactForCurrentUser(currentContact, contactId),
+          ),
     );
     setSelectedContact((currentContact) =>
       currentContact?.id === contactId
-        ? { ...currentContact, isMuted: willMute }
+        ? {
+            ...currentContact,
+            isMuted: willMute,
+            conversationStateUpdatedAt: mutedContact.conversationStateUpdatedAt,
+          }
         : currentContact,
     );
     toast.success(willMute ? "Conversa silenciada." : "Conversa reativada.");
@@ -3543,21 +3597,32 @@ export function UniparWorkspace({
     const willPin = !(contact?.isPinned ?? false);
     const pinnedContact = toOwnedDirectContact(contact, {
       isPinned: willPin,
+      conversationStateUpdatedAt: new Date(),
     });
 
     setContacts((currentContacts) =>
-      upsertDirectContactForCurrentUser(currentContacts, pinnedContact),
+      pinnedContact.isArchived
+        ? currentContacts.filter(
+            (currentContact) =>
+              !isStoredDirectContactForCurrentUser(currentContact, contactId),
+          )
+        : upsertDirectContactForCurrentUser(currentContacts, pinnedContact),
     );
     setArchivedContacts((currentContacts) =>
-      currentContacts.some((currentContact) =>
-        isStoredDirectContactForCurrentUser(currentContact, contactId),
-      )
+      pinnedContact.isArchived
         ? upsertDirectContactForCurrentUser(currentContacts, pinnedContact)
-        : currentContacts,
+        : currentContacts.filter(
+            (currentContact) =>
+              !isStoredDirectContactForCurrentUser(currentContact, contactId),
+          ),
     );
     setSelectedContact((currentContact) =>
       currentContact?.id === contactId
-        ? { ...currentContact, isPinned: willPin }
+        ? {
+            ...currentContact,
+            isPinned: willPin,
+            conversationStateUpdatedAt: pinnedContact.conversationStateUpdatedAt,
+          }
         : currentContact,
     );
     toast.success(willPin ? "Conversa fixada." : "Conversa desfixada.");
@@ -3899,55 +3964,82 @@ export function UniparWorkspace({
   };
 
   const handleMuteGroup = (groupId: string) => {
-    const group =
-      selectedGroup?.id === groupId
-        ? selectedGroup
-        : groups.find((currentGroup) => currentGroup.id === groupId) ??
-          archivedGroups.find((currentGroup) => currentGroup.id === groupId);
-    const willMute = !(group?.isMuted ?? false);
+    if (!currentAnnouncementUser.id) return;
+
+    const group = findGroupConversation(groupId);
+    if (!group) return;
+
+    const currentUserId = currentAnnouncementUser.id;
+    const willMute = !getConversationStateForUser(group, currentUserId).isMuted;
 
     setGroups((currentGroups) =>
       currentGroups.map((group) =>
-        group.id === groupId ? { ...group, isMuted: !group.isMuted } : group,
+        group.id === groupId
+          ? updateConversationPreferenceForUser(group, currentUserId, {
+              isMuted: willMute,
+            })
+          : group,
       ),
     );
     setArchivedGroups((currentGroups) =>
       currentGroups.map((group) =>
-        group.id === groupId ? { ...group, isMuted: !group.isMuted } : group,
+        group.id === groupId
+          ? updateConversationPreferenceForUser(group, currentUserId, {
+              isMuted: willMute,
+            })
+          : group,
       ),
     );
-    if (selectedGroup?.id === groupId) {
-      setSelectedGroup({
-        ...selectedGroup,
-        isMuted: !selectedGroup.isMuted,
-      });
-    }
+    setSelectedGroup((currentGroup) => {
+      if (currentGroup?.id !== groupId) return currentGroup;
+
+      return hydrateConversationStateForUser(
+        updateConversationPreferenceForUser(currentGroup, currentUserId, {
+          isMuted: willMute,
+        }),
+        currentUserId,
+      );
+    });
     toast.success(willMute ? "Grupo silenciado." : "Grupo reativado.");
   };
 
   const handlePinGroup = (groupId: string) => {
-    const group =
-      selectedGroup?.id === groupId
-        ? selectedGroup
-        : groups.find((currentGroup) => currentGroup.id === groupId) ??
-          archivedGroups.find((currentGroup) => currentGroup.id === groupId);
-    const willPin = !(group?.isPinned ?? false);
+    if (!currentAnnouncementUser.id) return;
+
+    const group = findGroupConversation(groupId);
+    if (!group) return;
+
+    const currentUserId = currentAnnouncementUser.id;
+    const willPin = !getConversationStateForUser(group, currentUserId).isPinned;
 
     setGroups((currentGroups) =>
       currentGroups.map((group) =>
-        group.id === groupId ? { ...group, isPinned: !group.isPinned } : group,
+        group.id === groupId
+          ? updateConversationPreferenceForUser(group, currentUserId, {
+              isPinned: willPin,
+            })
+          : group,
       ),
     );
     setArchivedGroups((currentGroups) =>
       currentGroups.map((group) =>
-        group.id === groupId ? { ...group, isPinned: !group.isPinned } : group,
+        group.id === groupId
+          ? updateConversationPreferenceForUser(group, currentUserId, {
+              isPinned: willPin,
+            })
+          : group,
       ),
     );
-    setSelectedGroup((currentGroup) =>
-      currentGroup?.id === groupId
-        ? { ...currentGroup, isPinned: !currentGroup.isPinned }
-        : currentGroup,
-    );
+    setSelectedGroup((currentGroup) => {
+      if (currentGroup?.id !== groupId) return currentGroup;
+
+      return hydrateConversationStateForUser(
+        updateConversationPreferenceForUser(currentGroup, currentUserId, {
+          isPinned: willPin,
+        }),
+        currentUserId,
+      );
+    });
     toast.success(willPin ? "Grupo fixado." : "Grupo desfixado.");
   };
 

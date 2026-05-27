@@ -11,7 +11,11 @@ import type {
   ExtensionContentItem,
   HelpContentItem,
 } from "@/lib/admin-data";
-import type { Contact, Message } from "@/lib/chat-data";
+import type {
+  Contact,
+  ContactConversationPreference,
+  Message,
+} from "@/lib/chat-data";
 import type { LoanRequest } from "@/lib/loan-data";
 import type { ServiceTicket } from "@/lib/service-ticket-data";
 
@@ -284,10 +288,77 @@ function getContactStateFreshnessTime(contact: Contact) {
   return contact.conversationStateUpdatedAt?.getTime();
 }
 
+function getContactConversationPreferenceFreshnessTime(
+  preference: ContactConversationPreference,
+) {
+  return preference.updatedAt?.getTime();
+}
+
+function getFreshestContactConversationPreference(
+  storedPreference: ContactConversationPreference,
+  incomingPreference: ContactConversationPreference,
+) {
+  const storedUpdatedAt =
+    getContactConversationPreferenceFreshnessTime(storedPreference);
+  const incomingUpdatedAt =
+    getContactConversationPreferenceFreshnessTime(incomingPreference);
+
+  if (incomingUpdatedAt === undefined && storedUpdatedAt !== undefined) {
+    return storedPreference;
+  }
+
+  if (incomingUpdatedAt !== undefined && storedUpdatedAt !== undefined) {
+    return incomingUpdatedAt >= storedUpdatedAt
+      ? incomingPreference
+      : storedPreference;
+  }
+
+  return incomingPreference;
+}
+
+function mergeContactConversationPreferences(
+  storedPreferences: Contact["conversationPreferencesByUserId"],
+  incomingPreferences: Contact["conversationPreferencesByUserId"],
+) {
+  if (!storedPreferences && !incomingPreferences) return undefined;
+
+  const userIds = new Set([
+    ...Object.keys(storedPreferences ?? {}),
+    ...Object.keys(incomingPreferences ?? {}),
+  ]);
+  const preferencesByUserId: Record<string, ContactConversationPreference> = {};
+
+  userIds.forEach((userId) => {
+    const storedPreference = storedPreferences?.[userId];
+    const incomingPreference = incomingPreferences?.[userId];
+
+    if (!storedPreference && !incomingPreference) return;
+
+    if (storedPreference && incomingPreference) {
+      preferencesByUserId[userId] = getFreshestContactConversationPreference(
+        storedPreference,
+        incomingPreference,
+      );
+      return;
+    }
+
+    if (storedPreference) {
+      preferencesByUserId[userId] = storedPreference;
+      return;
+    }
+
+    if (incomingPreference) {
+      preferencesByUserId[userId] = incomingPreference;
+    }
+  });
+
+  return preferencesByUserId;
+}
+
 function mergeContact(storedContact: Contact, incomingContact: Contact) {
   const storedStateFreshness = getContactStateFreshnessTime(storedContact);
   const incomingStateFreshness = getContactStateFreshnessTime(incomingContact);
-  const archiveStateContact =
+  const conversationStateContact =
     storedStateFreshness !== undefined &&
     (incomingStateFreshness === undefined ||
       storedStateFreshness > incomingStateFreshness)
@@ -297,14 +368,20 @@ function mergeContact(storedContact: Contact, incomingContact: Contact) {
   return {
     ...storedContact,
     ...incomingContact,
-    isArchived: archiveStateContact.isArchived,
+    isArchived: conversationStateContact.isArchived,
+    isMuted: conversationStateContact.isMuted,
+    isPinned: conversationStateContact.isPinned,
     conversationStateUpdatedAt:
-      archiveStateContact.conversationStateUpdatedAt ??
+      conversationStateContact.conversationStateUpdatedAt ??
       incomingContact.conversationStateUpdatedAt ??
       storedContact.conversationStateUpdatedAt,
     hiddenForUserIds: mergeStringLists(
       storedContact.hiddenForUserIds,
       incomingContact.hiddenForUserIds,
+    ),
+    conversationPreferencesByUserId: mergeContactConversationPreferences(
+      storedContact.conversationPreferencesByUserId,
+      incomingContact.conversationPreferencesByUserId,
     ),
   };
 }

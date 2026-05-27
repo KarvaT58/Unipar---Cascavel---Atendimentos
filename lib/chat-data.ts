@@ -189,10 +189,20 @@ export function toggleMessageFavoriteForUser(
   };
 }
 
+export interface ContactConversationPreference {
+  isMuted?: boolean;
+  isPinned?: boolean;
+  updatedAt: Date;
+}
+
 export interface Contact {
   id: string;
   ownerId?: string;
   hiddenForUserIds?: string[];
+  conversationPreferencesByUserId?: Record<
+    string,
+    ContactConversationPreference
+  >;
   name: string;
   avatar: string;
   email: string;
