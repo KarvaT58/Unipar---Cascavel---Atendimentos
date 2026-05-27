@@ -2185,6 +2185,15 @@ export function UniparWorkspace({
     ],
     [isStoredDirectContactForCurrentUser],
   );
+  const upsertConversationById = useCallback(
+    (currentContacts: Contact[], contact: Contact) => [
+      contact,
+      ...currentContacts.filter(
+        (currentContact) => currentContact.id !== contact.id,
+      ),
+    ],
+    [],
+  );
   const toOwnedDirectContact = useCallback(
     (contact: Contact, updates: Partial<Contact> = {}): Contact => ({
       ...contact,
@@ -3311,12 +3320,17 @@ export function UniparWorkspace({
 
     if (!contact) return;
 
+    const archivedAt = new Date();
     const archivedContact = toOwnedDirectContact(contact, {
       isArchived: true,
+      conversationStateUpdatedAt: archivedAt,
     });
 
     setContacts((currentContacts) =>
-      upsertDirectContactForCurrentUser(currentContacts, archivedContact),
+      currentContacts.filter(
+        (currentContact) =>
+          !isStoredDirectContactForCurrentUser(currentContact, contactId),
+      ),
     );
     setArchivedContacts((currentContacts) =>
       upsertDirectContactForCurrentUser(currentContacts, archivedContact),
@@ -3334,16 +3348,22 @@ export function UniparWorkspace({
 
     if (!contact) return;
 
+    const unarchivedAt = new Date();
     const restoredContact = toOwnedDirectContact(contact, {
       isArchived: false,
+      conversationStateUpdatedAt: unarchivedAt,
     });
 
     setContacts((currentContacts) =>
       upsertDirectContactForCurrentUser(currentContacts, restoredContact),
     );
     setArchivedContacts((currentContacts) =>
-      upsertDirectContactForCurrentUser(currentContacts, restoredContact),
+      currentContacts.filter(
+        (currentContact) =>
+          !isStoredDirectContactForCurrentUser(currentContact, contactId),
+      ),
     );
+    setShowArchived(false);
     toast.success("Conversa desarquivada.");
   };
 
@@ -3701,14 +3721,18 @@ export function UniparWorkspace({
   const handleArchiveGroup = (groupId: string) => {
     const group = groups.find((currentGroup) => currentGroup.id === groupId);
     if (group) {
-      setGroups(
-        groups.map((currentGroup) =>
-          currentGroup.id === groupId
-            ? { ...currentGroup, isArchived: true }
-            : currentGroup,
-        ),
+      const archivedGroup = {
+        ...group,
+        isArchived: true,
+        conversationStateUpdatedAt: new Date(),
+      };
+
+      setGroups((currentGroups) =>
+        currentGroups.filter((currentGroup) => currentGroup.id !== groupId),
       );
-      setArchivedGroups([...archivedGroups, { ...group, isArchived: true }]);
+      setArchivedGroups((currentGroups) =>
+        upsertConversationById(currentGroups, archivedGroup),
+      );
       if (selectedGroup?.id === groupId) {
         setSelectedGroup(null);
       }
@@ -3721,16 +3745,19 @@ export function UniparWorkspace({
       (currentGroup) => currentGroup.id === groupId,
     );
     if (group) {
-      setArchivedGroups(
-        archivedGroups.filter((currentGroup) => currentGroup.id !== groupId),
+      const restoredGroup = {
+        ...group,
+        isArchived: false,
+        conversationStateUpdatedAt: new Date(),
+      };
+
+      setArchivedGroups((currentGroups) =>
+        currentGroups.filter((currentGroup) => currentGroup.id !== groupId),
       );
-      setGroups(
-        groups.map((currentGroup) =>
-          currentGroup.id === groupId
-            ? { ...currentGroup, isArchived: false }
-            : currentGroup,
-        ),
+      setGroups((currentGroups) =>
+        upsertConversationById(currentGroups, restoredGroup),
       );
+      setShowArchivedGroups(false);
       toast.success("Grupo desarquivado.");
     }
   };

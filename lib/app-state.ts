@@ -113,6 +113,7 @@ const DATE_FIELD_NAMES = new Set([
   "scheduledAt",
   "completedAt",
   "lastSeenAt",
+  "conversationStateUpdatedAt",
 ]);
 
 function isIsoLikeDate(value: unknown): value is string {
@@ -265,35 +266,67 @@ function mergeMessageCollections(
   );
 }
 
-function mergeContacts(storedContacts: Contact[], incomingContacts: Contact[]) {
+function getContactKey(contact: Contact) {
+  return `${contact.ownerId ?? "global"}:${contact.id}`;
+}
+
+function getContactStateFreshnessTime(contact: Contact) {
+  return contact.conversationStateUpdatedAt?.getTime();
+}
+
+function mergeContact(storedContact: Contact, incomingContact: Contact) {
+  const storedStateFreshness = getContactStateFreshnessTime(storedContact);
+  const incomingStateFreshness = getContactStateFreshnessTime(incomingContact);
+  const archiveStateContact =
+    storedStateFreshness !== undefined &&
+    (incomingStateFreshness === undefined ||
+      storedStateFreshness > incomingStateFreshness)
+      ? storedContact
+      : incomingContact;
+
+  return {
+    ...storedContact,
+    ...incomingContact,
+    isArchived: archiveStateContact.isArchived,
+    conversationStateUpdatedAt:
+      archiveStateContact.conversationStateUpdatedAt ??
+      incomingContact.conversationStateUpdatedAt ??
+      storedContact.conversationStateUpdatedAt,
+    hiddenForUserIds: mergeStringLists(
+      storedContact.hiddenForUserIds,
+      incomingContact.hiddenForUserIds,
+    ),
+  };
+}
+
+function mergeContactBuckets(
+  storedActiveContacts: Contact[],
+  storedArchivedContacts: Contact[],
+  incomingActiveContacts: Contact[],
+  incomingArchivedContacts: Contact[],
+) {
   const contactsByKey = new Map<string, Contact>();
-  const getContactKey = (contact: Contact) =>
-    `${contact.ownerId ?? "global"}:${contact.id}`;
-
-  storedContacts.forEach((contact) => {
-    contactsByKey.set(getContactKey(contact), contact);
-  });
-
-  incomingContacts.forEach((contact) => {
+  const addContact = (contact: Contact) => {
     const contactKey = getContactKey(contact);
     const storedContact = contactsByKey.get(contactKey);
 
     contactsByKey.set(
       contactKey,
-      storedContact
-        ? {
-            ...storedContact,
-            ...contact,
-            hiddenForUserIds: mergeStringLists(
-              storedContact.hiddenForUserIds,
-              contact.hiddenForUserIds,
-            ),
-          }
-        : contact,
+      storedContact ? mergeContact(storedContact, contact) : contact,
     );
-  });
+  };
 
-  return Array.from(contactsByKey.values());
+  storedActiveContacts.forEach(addContact);
+  storedArchivedContacts.forEach(addContact);
+  incomingActiveContacts.forEach(addContact);
+  incomingArchivedContacts.forEach(addContact);
+
+  const contacts = Array.from(contactsByKey.values());
+
+  return {
+    active: contacts.filter((contact) => !contact.isArchived),
+    archived: contacts.filter((contact) => contact.isArchived),
+  };
 }
 
 function sortAppPageRecordList(records: AppPageRecord[]) {
@@ -545,20 +578,26 @@ export function mergeAppStates(
     storedState.deletedAnnouncementEventIds,
     incomingState.deletedAnnouncementEventIds,
   );
+  const directContactBuckets = mergeContactBuckets(
+    storedState.contacts,
+    storedState.archivedContacts,
+    incomingState.contacts,
+    incomingState.archivedContacts,
+  );
+  const groupContactBuckets = mergeContactBuckets(
+    storedState.groups,
+    storedState.archivedGroups,
+    incomingState.groups,
+    incomingState.archivedGroups,
+  );
 
   return {
     ...storedState,
     ...incomingState,
-    contacts: mergeContacts(storedState.contacts, incomingState.contacts),
-    archivedContacts: mergeContacts(
-      storedState.archivedContacts,
-      incomingState.archivedContacts,
-    ),
-    groups: mergeContacts(storedState.groups, incomingState.groups),
-    archivedGroups: mergeContacts(
-      storedState.archivedGroups,
-      incomingState.archivedGroups,
-    ),
+    contacts: directContactBuckets.active,
+    archivedContacts: directContactBuckets.archived,
+    groups: groupContactBuckets.active,
+    archivedGroups: groupContactBuckets.archived,
     messagesByContact: mergeMessageCollections(
       storedState.messagesByContact,
       incomingState.messagesByContact,

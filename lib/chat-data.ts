@@ -209,6 +209,7 @@ export interface Contact {
   isTyping: boolean;
   typingText?: string;
   isArchived: boolean;
+  conversationStateUpdatedAt?: Date;
   isMuted: boolean;
   isPinned: boolean;
 }
