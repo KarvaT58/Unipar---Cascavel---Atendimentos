@@ -73,6 +73,7 @@ import {
   type Message,
   getChatPresenceStatus,
   hideMessageForUser,
+  isGroupMessageReadByUser,
   isMessageHiddenForUser,
 } from "@/lib/chat-data";
 import {
@@ -400,7 +401,7 @@ function markDirectConversationMessagesAsRead(
 function shouldMarkGroupMessageAsRead(message: Message, currentUserId: string) {
   if (
     message.deletedForEveryone ||
-    message.status === "read" ||
+    isGroupMessageReadByUser(message, currentUserId) ||
     isMessageHiddenForUser(message, currentUserId)
   ) {
     return false;
@@ -416,7 +417,12 @@ function markGroupMessagesAsRead(messages: Message[], currentUserId: string) {
   const nextMessages = messages.map((message) => {
     if (shouldMarkGroupMessageAsRead(message, currentUserId)) {
       hasReadReceiptUpdate = true;
-      return { ...message, status: "read" as const };
+      return {
+        ...message,
+        readByUserIds: Array.from(
+          new Set([...(message.readByUserIds ?? []), currentUserId]),
+        ),
+      };
     }
 
     return message;
@@ -1440,6 +1446,8 @@ export function UniparWorkspace({
   const priorityMessageAlertBaselineUserIdRef = useRef("");
   const knownNotificationMessageKeysRef = useRef<Set<string>>(new Set());
   const notificationBaselineUserIdRef = useRef("");
+  const messageNotificationAudioRef = useRef<HTMLAudioElement | null>(null);
+  const pendingMessageNotificationSoundRef = useRef(false);
 
   const storeSeenPriorityMessageKeys = useCallback(
     (priorityMessageKeys: Set<string>) => {
@@ -1473,6 +1481,49 @@ export function UniparWorkspace({
     },
     [storeSeenPriorityMessageKeys],
   );
+
+  useEffect(() => {
+    messageNotificationAudioRef.current = new Audio(NOTIFICATION_SOUND_SRC);
+    messageNotificationAudioRef.current.preload = "auto";
+
+    return () => {
+      messageNotificationAudioRef.current = null;
+    };
+  }, []);
+
+  const playMessageNotificationSound = useCallback(() => {
+    const audio = messageNotificationAudioRef.current;
+
+    if (!audio) {
+      pendingMessageNotificationSoundRef.current = true;
+      return;
+    }
+
+    audio.currentTime = 0;
+    void audio.play().catch(() => {
+      pendingMessageNotificationSoundRef.current = true;
+    });
+  }, []);
+
+  const flushPendingMessageNotificationSound = useCallback(() => {
+    if (!pendingMessageNotificationSoundRef.current) return;
+
+    pendingMessageNotificationSoundRef.current = false;
+    playMessageNotificationSound();
+  }, [playMessageNotificationSound]);
+
+  useEffect(() => {
+    window.addEventListener("pointerdown", flushPendingMessageNotificationSound);
+    window.addEventListener("keydown", flushPendingMessageNotificationSound);
+
+    return () => {
+      window.removeEventListener(
+        "pointerdown",
+        flushPendingMessageNotificationSound,
+      );
+      window.removeEventListener("keydown", flushPendingMessageNotificationSound);
+    };
+  }, [flushPendingMessageNotificationSound]);
 
   const navigateTo = useCallback(
     (item: string, mode: "push" | "replace" = "push") => {
@@ -1987,7 +2038,7 @@ export function UniparWorkspace({
   );
   const getUnreadDirectCount = useCallback(
     (contactId: string) => {
-      if (selectedContact?.id === contactId) return 0;
+      if (activeNav === "chat" && selectedContact?.id === contactId) return 0;
 
       return getDisplayedDirectMessages(contactId).filter(
         (message) =>
@@ -1996,21 +2047,27 @@ export function UniparWorkspace({
           message.status !== "read",
       ).length;
     },
-    [getDisplayedDirectMessages, isMessageFromCurrentUser, selectedContact?.id],
+    [
+      activeNav,
+      getDisplayedDirectMessages,
+      isMessageFromCurrentUser,
+      selectedContact?.id,
+    ],
   );
   const getUnreadGroupCount = useCallback(
     (groupId: string) => {
-      if (selectedGroup?.id === groupId) return 0;
+      if (activeNav === "grupos" && selectedGroup?.id === groupId) return 0;
 
       return (groupMessagesByContact[groupId] ?? []).filter(
         (message) =>
           !isMessageHiddenForUser(message, currentAnnouncementUser.id) &&
           !isMessageFromCurrentUser(message) &&
           !message.deletedForEveryone &&
-          message.status !== "read",
+          !isGroupMessageReadByUser(message, currentAnnouncementUser.id),
       ).length;
     },
     [
+      activeNav,
       currentAnnouncementUser.id,
       groupMessagesByContact,
       isMessageFromCurrentUser,
@@ -2406,7 +2463,8 @@ export function UniparWorkspace({
 
     displayContacts.forEach((contact) => {
       const canPlaySoundForContact =
-        contact.id !== selectedContact?.id && !contact.isMuted;
+        !(activeNav === "chat" && contact.id === selectedContact?.id) &&
+        !contact.isMuted;
 
       getDisplayedDirectMessages(contact.id).forEach((message) => {
         if (
@@ -2433,13 +2491,14 @@ export function UniparWorkspace({
 
     displayGroups.forEach((group) => {
       const canPlaySoundForGroup =
-        group.id !== selectedGroup?.id && !group.isMuted;
+        !(activeNav === "grupos" && group.id === selectedGroup?.id) &&
+        !group.isMuted;
 
       (groupMessagesByContact[group.id] ?? []).forEach((message) => {
         if (
           isMessageFromCurrentUser(message) ||
           message.deletedForEveryone ||
-          message.status === "read" ||
+          isGroupMessageReadByUser(message, currentAnnouncementUser.id) ||
           isMessageHiddenForUser(message, currentAnnouncementUser.id)
         ) {
           return;
@@ -2460,6 +2519,7 @@ export function UniparWorkspace({
 
     return { allKeys, audibleKeys };
   }, [
+    activeNav,
     currentAnnouncementUser.id,
     displayContacts,
     displayGroups,
@@ -2539,11 +2599,12 @@ export function UniparWorkspace({
 
     if (!hasNewAudibleNotification) return;
 
-    void new Audio(NOTIFICATION_SOUND_SRC).play().catch(() => undefined);
+    playMessageNotificationSound();
   }, [
     currentAnnouncementUser.id,
     isAuthenticated,
     notificationMessageSnapshot,
+    playMessageNotificationSound,
   ]);
   const selectedMessages = selectedContact
     ? getDisplayedDirectMessages(selectedContact.id)
@@ -4306,6 +4367,7 @@ export function UniparWorkspace({
 
   useEffect(() => {
     if (
+      activeNav !== "chat" ||
       !selectedContact ||
       !currentAnnouncementUser.id ||
       selectedContact.id === currentAnnouncementUser.id
@@ -4327,10 +4389,21 @@ export function UniparWorkspace({
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [currentAnnouncementUser.id, messagesByContact, selectedContact]);
+  }, [
+    activeNav,
+    currentAnnouncementUser.id,
+    messagesByContact,
+    selectedContact,
+  ]);
 
   useEffect(() => {
-    if (!selectedGroup || !currentAnnouncementUser.id) return;
+    if (
+      activeNav !== "grupos" ||
+      !selectedGroup ||
+      !currentAnnouncementUser.id
+    ) {
+      return;
+    }
 
     const groupMessages = groupMessagesByContact[selectedGroup.id];
     if (!groupMessages) return;
@@ -4354,6 +4427,7 @@ export function UniparWorkspace({
 
     return () => window.clearTimeout(timeoutId);
   }, [
+    activeNav,
     currentAnnouncementUser.id,
     groupMessagesByContact,
     isMessageFromCurrentUser,

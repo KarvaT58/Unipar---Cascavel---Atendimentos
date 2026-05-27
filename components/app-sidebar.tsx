@@ -28,7 +28,11 @@ import {
 import { fetchBackendState } from "@/lib/backend-client"
 import type { Sector } from "@/lib/admin-data"
 import type { AppState } from "@/lib/app-state"
-import { isMessageHiddenForUser, type Message } from "@/lib/chat-data"
+import {
+  isGroupMessageReadByUser,
+  isMessageHiddenForUser,
+  type Message,
+} from "@/lib/chat-data"
 import {
   SERVICE_TICKET_NOTIFICATION_EVENT,
   getServiceTicketNotificationSnapshot,
@@ -589,7 +593,7 @@ function getSidebarChatNotificationCounts(state: AppState, userId: string) {
       if (!canContainIncomingDirectMessage) return
 
       messages.forEach((message) => {
-        if (!shouldCountIncomingMessage(message, userId)) return
+        if (!shouldCountIncomingDirectMessage(message, userId)) return
         if (directMessageIds.has(message.id)) return
 
         directMessageIds.add(message.id)
@@ -602,7 +606,7 @@ function getSidebarChatNotificationCounts(state: AppState, userId: string) {
     if (!canUserSeeSidebarGroup(groupId, userId, state)) return
 
     messages.forEach((message) => {
-      if (shouldCountIncomingMessage(message, userId)) {
+      if (shouldCountIncomingGroupMessage(message, userId)) {
         groups += 1
       }
     })
@@ -640,10 +644,24 @@ function parseDirectConversationKey(key: string) {
   return [firstUserId, secondUserId] as const
 }
 
-function shouldCountIncomingMessage(message: Message, userId: string) {
+function shouldCountIncomingDirectMessage(message: Message, userId: string) {
   if (
     message.deletedForEveryone ||
     message.status === "read" ||
+    isMessageHiddenForUser(message, userId)
+  ) {
+    return false
+  }
+
+  if (message.senderId) return message.senderId !== userId
+
+  return message.isOwn === false
+}
+
+function shouldCountIncomingGroupMessage(message: Message, userId: string) {
+  if (
+    message.deletedForEveryone ||
+    isGroupMessageReadByUser(message, userId) ||
     isMessageHiddenForUser(message, userId)
   ) {
     return false
@@ -665,5 +683,9 @@ function canUserSeeSidebarGroup(
 
   if (!metadata) return false
 
-  return new Set([...metadata.adminIds, ...metadata.participantIds]).has(userId)
+  return new Set([
+    metadata.creatorId,
+    ...metadata.adminIds,
+    ...metadata.participantIds,
+  ]).has(userId)
 }

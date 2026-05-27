@@ -163,10 +163,12 @@ function reviveDateFields(value: unknown, key?: string): unknown {
 export function normalizeAppState(value: unknown): AppState {
   const revivedValue = reviveDateFields(value) as Partial<AppState> | null;
 
-  return {
+  const state: AppState = {
     ...EMPTY_APP_STATE,
     ...(revivedValue ?? {}),
   };
+
+  return normalizeGroupMessageReadReceipts(state);
 }
 
 export function serializeAppState(state: AppState) {
@@ -197,6 +199,52 @@ function getMessageStatusWithHighestPriority(
   return MESSAGE_STATUS_PRIORITY[first] >= MESSAGE_STATUS_PRIORITY[second]
     ? first
     : second;
+}
+
+function getGroupMemberIdsForReadReceipt(metadata?: GroupMetadataState) {
+  if (!metadata) return [];
+
+  return Array.from(
+    new Set(
+      [metadata.creatorId, ...metadata.adminIds, ...metadata.participantIds]
+        .filter((userId): userId is string => Boolean(userId)),
+    ),
+  );
+}
+
+function normalizeGroupMessageReadReceipts(state: AppState): AppState {
+  let hasUpdates = false;
+  const groupMessagesByContact = Object.fromEntries(
+    Object.entries(state.groupMessagesByContact).map(([groupId, messages]) => {
+      const memberIds = getGroupMemberIdsForReadReceipt(
+        state.groupMetadataById[groupId],
+      );
+
+      if (memberIds.length === 0) return [groupId, messages];
+
+      const nextMessages = messages.map((message) => {
+        if (message.readByUserIds || message.status !== "read") {
+          return message;
+        }
+
+        hasUpdates = true;
+
+        return {
+          ...message,
+          readByUserIds: memberIds,
+        };
+      });
+
+      return [groupId, nextMessages];
+    }),
+  );
+
+  if (!hasUpdates) return state;
+
+  return {
+    ...state,
+    groupMessagesByContact,
+  };
 }
 
 function getMessagePreferenceFreshnessTime(
@@ -289,6 +337,12 @@ function mergeMessage(storedMessage: Message, incomingMessage: Message) {
       storedMessage.hiddenForUserIds,
       incomingMessage.hiddenForUserIds,
     ),
+    readByUserIds: deletedForEveryone
+      ? []
+      : mergeOptionalStringLists(
+          storedMessage.readByUserIds,
+          incomingMessage.readByUserIds,
+        ),
     pinnedForUserIds: deletedForEveryone
       ? []
       : mergeOptionalStringLists(

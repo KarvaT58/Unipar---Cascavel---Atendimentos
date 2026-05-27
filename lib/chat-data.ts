@@ -37,6 +37,7 @@ export interface Message {
   isForwarded?: boolean;
   isPinned?: boolean;
   isFavorite?: boolean;
+  readByUserIds?: string[];
   pinnedForUserIds?: string[];
   favoriteForUserIds?: string[];
   messagePreferencesByUserId?: Record<string, MessageConversationPreference>;
@@ -119,6 +120,10 @@ export function hideMessageForUser(message: Message, userId: string): Message {
     ...message,
     hiddenForUserIds: [...(message.hiddenForUserIds ?? []), userId],
   };
+}
+
+export function isGroupMessageReadByUser(message: Message, userId: string) {
+  return message.readByUserIds?.includes(userId) ?? false;
 }
 
 function hasScopedMessageFlag(
