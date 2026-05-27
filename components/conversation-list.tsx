@@ -816,7 +816,7 @@ export function ConversationList({
               className={cn(
                 "group flex cursor-pointer select-none items-center gap-3 px-3 py-3 transition-[background-color,box-shadow,transform] hover:bg-muted/35",
                 selectedContact?.id === contact.id &&
-                  "bg-primary/5 shadow-[inset_3px_0_0_var(--primary)]",
+                  "shadow-[inset_3px_0_0_var(--primary)]",
                 activeLongPressContactId === contact.id &&
                   (openContactMenuId === contact.id
                     ? "long-press-selected"
