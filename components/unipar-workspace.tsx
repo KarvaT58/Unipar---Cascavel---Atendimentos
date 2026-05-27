@@ -213,6 +213,15 @@ function getPathFromNav(item: string) {
   return isAppNavId(item) ? NAV_PATHS[item] : NAV_PATHS.chat;
 }
 
+function getDateTimeValue(value?: Date | string | null) {
+  if (!value) return undefined;
+
+  const date = value instanceof Date ? value : new Date(value);
+  const time = date.getTime();
+
+  return Number.isFinite(time) ? time : undefined;
+}
+
 function getDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
     2,
@@ -1576,7 +1585,8 @@ export function UniparWorkspace({
         nextUser.about === currentUser.about &&
         nextUser.chatStatus === currentUser.chatStatus &&
         nextUser.workStatus === currentUser.workStatus &&
-        nextUser.lastSeenAt?.getTime() === currentUser.lastSeenAt?.getTime()
+        getDateTimeValue(nextUser.lastSeenAt) ===
+          getDateTimeValue(currentUser.lastSeenAt)
       ) {
         return currentUser;
       }

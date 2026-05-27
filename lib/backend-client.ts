@@ -45,6 +45,31 @@ function delay(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+function parseOptionalDate(value: unknown) {
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime()) ? value : undefined;
+  }
+
+  if (typeof value !== "string" && typeof value !== "number") {
+    return undefined;
+  }
+
+  const date = new Date(value);
+
+  return Number.isFinite(date.getTime()) ? date : undefined;
+}
+
+function normalizeAuthenticatedUser(
+  user: BackendAuthenticatedUser | null | undefined,
+) {
+  if (!user) return null;
+
+  return {
+    ...user,
+    lastSeenAt: parseOptionalDate(user.lastSeenAt),
+  };
+}
+
 export function isTransientBackendFetchError(error: unknown) {
   return error instanceof TypeError && error.message.toLowerCase().includes("fetch");
 }
@@ -216,7 +241,7 @@ export async function fetchCurrentSession() {
     user?: BackendAuthenticatedUser | null;
   };
 
-  return result.user ?? null;
+  return normalizeAuthenticatedUser(result.user);
 }
 
 export async function clearCurrentSession(clientId?: string) {
