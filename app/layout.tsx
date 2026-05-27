@@ -22,7 +22,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Unipar",
+  title: "Unipar - Cascavel Atendimentos",
   description: "SaaS para atendimento multicanal, operação interna, automações e IA.",
 };
 
