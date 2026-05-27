@@ -23,6 +23,14 @@ import {
 } from "@/lib/server/audit-log"
 import { getHydratedPresenceSnapshot } from "@/lib/server/presence"
 import {
+  areServiceTicketListsEqual,
+  hydrateServiceTicketsFromDatabase,
+  hydrateServiceTicketsWithDatabaseRows,
+  omitDatabaseBackedServiceTickets,
+  readServiceTicketsFromDatabase,
+  syncServiceTicketsToDatabase,
+} from "@/lib/server/service-ticket-store"
+import {
   readLatestOfflineRealtimeEventId,
   readOfflineAppState,
   readOfflineRealtimeEvents,
@@ -158,20 +166,26 @@ export async function readAppState(): Promise<AppStateEnvelope> {
       await prisma.appStateDocument.create({
         data: {
           key: STATE_KEY,
-          data: toJsonValue(EMPTY_APP_STATE),
+          data: toJsonValue(omitDatabaseBackedServiceTickets(EMPTY_APP_STATE)),
           revision: BigInt(0),
         },
       })
 
       return {
-        state: await hydrateAppStateAuthUsers(EMPTY_APP_STATE),
+        state: await hydrateAppStateAuthUsers(
+          await hydrateServiceTicketsFromDatabase(EMPTY_APP_STATE)
+        ),
         revision: 0,
         databaseConnected: true,
       }
     }
 
+    const state = await hydrateServiceTicketsFromDatabase(
+      normalizeAppState(document.data)
+    )
+
     return {
-      state: await hydrateAppStateAuthUsers(normalizeAppState(document.data)),
+      state: await hydrateAppStateAuthUsers(state),
       revision: Number(document.revision),
       databaseConnected: true,
     }
@@ -270,12 +284,29 @@ async function saveAppStateInDatabaseNow(
             where: { key: STATE_KEY },
           })
           const incomingStateToSave = omitEphemeralAppState(state)
-          const currentState = currentDocument
+          const currentDocumentState = currentDocument
             ? normalizeAppState(currentDocument.data)
             : null
+          const databaseServiceTickets = await readServiceTicketsFromDatabase(tx)
+          const currentState = currentDocumentState
+            ? hydrateServiceTicketsWithDatabaseRows(
+                currentDocumentState,
+                databaseServiceTickets
+              )
+            : null
+          const hasEmbeddedServiceTickets =
+            (currentDocumentState?.serviceTickets.length ?? 0) > 0
+          const shouldSyncServiceTickets = !areServiceTicketListsEqual(
+            databaseServiceTickets,
+            incomingStateToSave.serviceTickets
+          )
 
           if (currentDocument && currentState) {
-            if (!hasPersistentStateChange(currentState, state)) {
+            if (
+              !hasPersistentStateChange(currentState, state) &&
+              !shouldSyncServiceTickets &&
+              !hasEmbeddedServiceTickets
+            ) {
               return {
                 state,
                 revision: Number(currentDocument.revision),
@@ -284,17 +315,22 @@ async function saveAppStateInDatabaseNow(
             }
           }
 
-          const stateToSave = currentDocument
-            ? mergeAppStates(
-                omitEphemeralAppState(currentState ?? EMPTY_APP_STATE),
-                incomingStateToSave
+          const baseState = currentDocument
+            ? omitEphemeralAppState(currentState ?? EMPTY_APP_STATE)
+            : hydrateServiceTicketsWithDatabaseRows(
+                EMPTY_APP_STATE,
+                databaseServiceTickets
               )
-            : incomingStateToSave
+          const stateToSave = mergeAppStates(baseState, incomingStateToSave)
+          const documentStateToSave =
+            omitDatabaseBackedServiceTickets(stateToSave)
 
           if (
             currentDocument &&
             currentState &&
-            !hasPersistentStateChange(currentState, stateToSave)
+            !hasPersistentStateChange(currentState, stateToSave) &&
+            !shouldSyncServiceTickets &&
+            !hasEmbeddedServiceTickets
           ) {
             return {
               state,
@@ -307,14 +343,14 @@ async function saveAppStateInDatabaseNow(
             ? await tx.appStateDocument.update({
                 where: { key: STATE_KEY },
                 data: {
-                  data: toJsonValue(stateToSave),
+                  data: toJsonValue(documentStateToSave),
                   revision: { increment: BigInt(1) },
                 },
               })
             : await tx.appStateDocument.create({
                 data: {
                   key: STATE_KEY,
-                  data: toJsonValue(stateToSave),
+                  data: toJsonValue(documentStateToSave),
                   revision: BigInt(1),
                 },
               })
@@ -333,6 +369,10 @@ async function saveAppStateInDatabaseNow(
             })
           }
 
+          if (shouldSyncServiceTickets || hasEmbeddedServiceTickets) {
+            await syncServiceTicketsToDatabase(tx, stateToSave.serviceTickets)
+          }
+
           await tx.realtimeEvent.create({
             data: {
               clientId,
@@ -345,7 +385,7 @@ async function saveAppStateInDatabaseNow(
           })
 
           return {
-            state: normalizeAppState(document.data),
+            state: stateToSave,
             revision,
           }
         },

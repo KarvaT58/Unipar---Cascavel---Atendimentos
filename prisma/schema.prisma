@@ -181,6 +181,97 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+model ServiceTicketRecord {
+  id                String    @id
+  title             String
+  description       String
+  requesterId       String    @map("requester_id")
+  requesterName     String    @map("requester_name")
+  requesterSector   String    @map("requester_sector")
+  targetSector      String    @map("target_sector")
+  priority          String
+  status            String
+  createdAt         DateTime  @map("created_at")
+  updatedAt         DateTime  @map("updated_at")
+  lastInteractionAt DateTime  @map("last_interaction_at")
+  assignedToId      String?   @map("assigned_to_id")
+  assignedToName    String?   @map("assigned_to_name")
+  assignedToSector  String?   @map("assigned_to_sector")
+  closedAt          DateTime? @map("closed_at")
+  closedById        String?   @map("closed_by_id")
+  closedByName      String?   @map("closed_by_name")
+  closeDescription  String?   @map("close_description")
+  reopenedAt        DateTime? @map("reopened_at")
+  reopenedById      String?   @map("reopened_by_id")
+  reopenedByName    String?   @map("reopened_by_name")
+  reopenReason      String?   @map("reopen_reason")
+
+  attachments ServiceTicketAttachmentRecord[]
+  messages    ServiceTicketMessageRecord[]
+  transfers   ServiceTicketTransferRecord[]
+
+  @@index([status, targetSector, lastInteractionAt], map: "service_ticket_records_status_sector_idx")
+  @@index([requesterId, createdAt], map: "service_ticket_records_requester_idx")
+  @@index([assignedToId, status], map: "service_ticket_records_assignee_idx")
+  @@index([closedAt], map: "service_ticket_records_closed_at_idx")
+  @@map("service_ticket_records")
+}
+
+model ServiceTicketMessageRecord {
+  id           String   @id
+  ticketId     String   @map("ticket_id")
+  authorId     String   @map("author_id")
+  authorName   String   @map("author_name")
+  authorSector String   @map("author_sector")
+  content      String
+  createdAt    DateTime @map("created_at")
+  isSystem     Boolean  @default(false) @map("is_system")
+  isInternal   Boolean  @default(false) @map("is_internal")
+
+  ticket      ServiceTicketRecord             @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  attachments ServiceTicketAttachmentRecord[]
+
+  @@index([ticketId, createdAt], map: "service_ticket_messages_ticket_created_idx")
+  @@index([authorId, createdAt], map: "service_ticket_messages_author_idx")
+  @@map("service_ticket_messages")
+}
+
+model ServiceTicketAttachmentRecord {
+  id           String  @id
+  attachmentId String  @map("attachment_id")
+  ticketId     String  @map("ticket_id")
+  messageId    String? @map("message_id")
+  name         String
+  size         Int
+  kind         String
+  url          String
+  extension    String?
+
+  ticket  ServiceTicketRecord         @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  message ServiceTicketMessageRecord? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId], map: "service_ticket_attachments_ticket_idx")
+  @@index([messageId], map: "service_ticket_attachments_message_idx")
+  @@map("service_ticket_attachments")
+}
+
+model ServiceTicketTransferRecord {
+  id                String   @id
+  ticketId          String   @map("ticket_id")
+  createdAt         DateTime @map("created_at")
+  fromSector        String   @map("from_sector")
+  toSector          String   @map("to_sector")
+  transferredById   String   @map("transferred_by_id")
+  transferredByName String   @map("transferred_by_name")
+  assignedToId      String?  @map("assigned_to_id")
+  assignedToName    String?  @map("assigned_to_name")
+
+  ticket ServiceTicketRecord @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt], map: "service_ticket_transfers_ticket_created_idx")
+  @@map("service_ticket_transfers")
+}
+
 model UploadFile {
   id           String   @id @default(cuid())
   ownerId      String
