@@ -163,6 +163,24 @@ model RealtimeEvent {
   @@map("realtime_events")
 }
 
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?  @map("actor_id")
+  actorName  String?  @map("actor_name")
+  actorEmail String?  @map("actor_email")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  summary    String
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt], map: "audit_logs_created_at_idx")
+  @@index([actorId, createdAt], map: "audit_logs_actor_created_at_idx")
+  @@index([entityType, entityId, createdAt], map: "audit_logs_entity_created_at_idx")
+  @@map("audit_logs")
+}
+
 model UploadFile {
   id           String   @id @default(cuid())
   ownerId      String

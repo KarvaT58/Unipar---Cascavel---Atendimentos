@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/breadcrumb"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import { GlobalSearch } from "@/components/global-search"
 import { ThemeToggle } from "@/components/theme-toggle"
 
 const routeLabels: Record<string, { title: string; parent?: string }> = {
@@ -141,6 +142,7 @@ export function AppHeader() {
         </Breadcrumb>
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        <GlobalSearch />
         <ThemeToggle />
       </div>
     </header>

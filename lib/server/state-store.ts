@@ -17,6 +17,10 @@ import {
 } from "@/lib/local-mode"
 import { listOfflineUsers } from "@/lib/offline-auth-store"
 import { isDatabaseConnectionError, prisma } from "@/lib/prisma"
+import {
+  createAppStateAuditLogEntries,
+  type AuditActor,
+} from "@/lib/server/audit-log"
 import { getHydratedPresenceSnapshot } from "@/lib/server/presence"
 import {
   readLatestOfflineRealtimeEventId,
@@ -185,7 +189,8 @@ export async function readAppState(): Promise<AppStateEnvelope> {
 export async function saveAppState(
   state: AppState,
   clientId: string,
-  source = "state"
+  source = "state",
+  actor?: AuditActor
 ) {
   if (shouldUseOfflineFallback()) {
     return saveOfflineAppState(state, clientId, source)
@@ -198,7 +203,7 @@ export async function saveAppState(
   }
 
   try {
-    const result = await saveAppStateInDatabase(state, clientId, source)
+    const result = await saveAppStateInDatabase(state, clientId, source, actor)
 
     return {
       ...result,
@@ -228,9 +233,12 @@ export async function saveAppState(
 async function saveAppStateInDatabase(
   state: AppState,
   clientId: string,
-  source: string
+  source: string,
+  actor?: AuditActor
 ) {
-  return enqueueStateSave(() => saveAppStateInDatabaseNow(state, clientId, source))
+  return enqueueStateSave(() =>
+    saveAppStateInDatabaseNow(state, clientId, source, actor)
+  )
 }
 
 function enqueueStateSave<T>(operation: () => Promise<T>) {
@@ -247,7 +255,8 @@ function enqueueStateSave<T>(operation: () => Promise<T>) {
 async function saveAppStateInDatabaseNow(
   state: AppState,
   clientId: string,
-  source: string
+  source: string,
+  actor?: AuditActor
 ): Promise<DatabaseSaveResult> {
   for (
     let attempt = 0;
@@ -310,6 +319,19 @@ async function saveAppStateInDatabaseNow(
                 },
               })
           const revision = Number(document.revision)
+          const auditEntries = createAppStateAuditLogEntries({
+            actor,
+            previousState: currentState ?? EMPTY_APP_STATE,
+            nextState: stateToSave,
+            revision,
+            source,
+          })
+
+          if (auditEntries.length > 0) {
+            await tx.auditLog.createMany({
+              data: auditEntries,
+            })
+          }
 
           await tx.realtimeEvent.create({
             data: {

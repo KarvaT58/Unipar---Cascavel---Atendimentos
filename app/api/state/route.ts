@@ -29,7 +29,13 @@ export async function PUT(request: Request) {
       ? `${body.source}:${currentUser.id}`
       : `state:${currentUser.id}`
 
-    return NextResponse.json(await saveAppState(state, clientId, source))
+    return NextResponse.json(
+      await saveAppState(state, clientId, source, {
+        id: currentUser.id,
+        name: currentUser.name,
+        email: currentUser.email,
+      })
+    )
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to save application data."
