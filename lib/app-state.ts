@@ -192,6 +192,18 @@ function mergeOptionalStringLists(first?: string[], second?: string[]) {
   return mergeStringLists(first, second);
 }
 
+function getDateLikeTime(value: unknown) {
+  if (value instanceof Date) return value.getTime();
+
+  if (typeof value === "string") {
+    const parsedTime = Date.parse(value);
+
+    return Number.isNaN(parsedTime) ? undefined : parsedTime;
+  }
+
+  return undefined;
+}
+
 function getMessageStatusWithHighestPriority(
   first: Message["status"],
   second: Message["status"],
@@ -250,7 +262,7 @@ function normalizeGroupMessageReadReceipts(state: AppState): AppState {
 function getMessagePreferenceFreshnessTime(
   preference: MessageConversationPreference,
 ) {
-  return preference.updatedAt?.getTime();
+  return getDateLikeTime(preference.updatedAt);
 }
 
 function getFreshestMessagePreference(
@@ -312,6 +324,34 @@ function mergeMessagePreferences(
   return preferencesByUserId;
 }
 
+function applyMessagePreferenceOverridesToUserIds(
+  userIds: string[] | undefined,
+  preferences: Message["messagePreferencesByUserId"],
+  preferenceKey: "isPinned" | "isFavorite",
+) {
+  const userIdSet = new Set(userIds ?? []);
+  let hasPreferenceOverride = false;
+
+  Object.entries(preferences ?? {}).forEach(([userId, preference]) => {
+    const nextValue = preference[preferenceKey];
+
+    if (nextValue === undefined) return;
+
+    hasPreferenceOverride = true;
+
+    if (nextValue) {
+      userIdSet.add(userId);
+      return;
+    }
+
+    userIdSet.delete(userId);
+  });
+
+  if (!userIds && !hasPreferenceOverride) return undefined;
+
+  return Array.from(userIdSet);
+}
+
 function mergeMessage(storedMessage: Message, incomingMessage: Message) {
   const deletedForEveryone =
     storedMessage.deletedForEveryone === true ||
@@ -319,6 +359,32 @@ function mergeMessage(storedMessage: Message, incomingMessage: Message) {
       ? true
       : (incomingMessage.deletedForEveryone ??
         storedMessage.deletedForEveryone);
+  const messagePreferencesByUserId = deletedForEveryone
+    ? {}
+    : mergeMessagePreferences(
+        storedMessage.messagePreferencesByUserId,
+        incomingMessage.messagePreferencesByUserId,
+      );
+  const pinnedForUserIds = deletedForEveryone
+    ? []
+    : applyMessagePreferenceOverridesToUserIds(
+        mergeOptionalStringLists(
+          storedMessage.pinnedForUserIds,
+          incomingMessage.pinnedForUserIds,
+        ),
+        messagePreferencesByUserId,
+        "isPinned",
+      );
+  const favoriteForUserIds = deletedForEveryone
+    ? []
+    : applyMessagePreferenceOverridesToUserIds(
+        mergeOptionalStringLists(
+          storedMessage.favoriteForUserIds,
+          incomingMessage.favoriteForUserIds,
+        ),
+        messagePreferencesByUserId,
+        "isFavorite",
+      );
 
   return {
     ...storedMessage,
@@ -343,24 +409,9 @@ function mergeMessage(storedMessage: Message, incomingMessage: Message) {
           storedMessage.readByUserIds,
           incomingMessage.readByUserIds,
         ),
-    pinnedForUserIds: deletedForEveryone
-      ? []
-      : mergeOptionalStringLists(
-          storedMessage.pinnedForUserIds,
-          incomingMessage.pinnedForUserIds,
-        ),
-    favoriteForUserIds: deletedForEveryone
-      ? []
-      : mergeOptionalStringLists(
-          storedMessage.favoriteForUserIds,
-          incomingMessage.favoriteForUserIds,
-        ),
-    messagePreferencesByUserId: deletedForEveryone
-      ? {}
-      : mergeMessagePreferences(
-          storedMessage.messagePreferencesByUserId,
-          incomingMessage.messagePreferencesByUserId,
-        ),
+    pinnedForUserIds,
+    favoriteForUserIds,
+    messagePreferencesByUserId,
   };
 }
 
