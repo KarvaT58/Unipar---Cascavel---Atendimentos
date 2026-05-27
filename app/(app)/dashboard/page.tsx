@@ -18,6 +18,7 @@ const chartColors = [
   "#fb7185",
   "#94a3b8",
 ]
+const DASHBOARD_CHART_MONTHS = 12
 
 type DashboardUser = {
   id: string
@@ -65,7 +66,9 @@ async function getDashboardData() {
     const { state } = await readAppState()
     const now = new Date()
     const since30Days = startOfDay(subDays(now, 29))
-    const since90Days = startOfDay(subDays(now, 89))
+    const sinceChartStart = startOfMonth(
+      subMonths(now, DASHBOARD_CHART_MONTHS - 1)
+    )
     const tickets = state.serviceTickets
     const sectorUsers = getDashboardSectorUsers(state.adminUsers, {
       ...currentUser,
@@ -81,7 +84,7 @@ async function getDashboardData() {
       .filter(
         (ticket) =>
           ticket.status === "completed" &&
-          isOnOrAfter(ticket.closedAt, since90Days) &&
+          isOnOrAfter(ticket.closedAt, sinceChartStart) &&
           Boolean(ticket.closedById) &&
           participantUserIds.has(ticket.closedById ?? "")
       )
@@ -117,7 +120,11 @@ async function getDashboardData() {
         name: participant.name,
         color: participant.color,
       })),
-      chartData: createResolvedChartData(participants, resolvedTickets, 90),
+      chartData: createResolvedChartData(
+        participants,
+        resolvedTickets,
+        DASHBOARD_CHART_MONTHS
+      ),
       databaseError: undefined,
     }
   } catch {
@@ -148,7 +155,7 @@ function createFallbackDashboardData(options?: {
     sectorLabel: options?.sectorLabel ?? "seu setor",
     userName: options?.userName ?? "Você",
     chartParticipants: participants,
-    chartData: createEmptyChartData(participants, 90),
+    chartData: createEmptyChartData(participants, DASHBOARD_CHART_MONTHS),
     databaseError: undefined as string | undefined,
   }
 }
@@ -324,14 +331,14 @@ function getSectorByCode(code: string): Sector | undefined {
 function createResolvedChartData(
   participants: ChartParticipant[],
   tickets: Array<{ resolvedAt: Date | null; resolvedById: string | null }>,
-  days: number
+  months: number
 ) {
   const participantByUserId = new Map(
     participants
       .filter((participant) => participant.userId)
       .map((participant) => [participant.userId, participant])
   )
-  const data = createEmptyChartData(participants, days)
+  const data = createEmptyChartData(participants, months)
   const dataByDate = new Map(data.map((item) => [item.date, item]))
 
   tickets.forEach((ticket) => {
@@ -340,25 +347,25 @@ function createResolvedChartData(
     }
 
     const participant = participantByUserId.get(ticket.resolvedById)
-    const day = dataByDate.get(toDateKey(ticket.resolvedAt))
+    const month = dataByDate.get(toMonthKey(ticket.resolvedAt))
 
-    if (!participant || !day) {
+    if (!participant || !month) {
       return
     }
 
-    day[participant.key] = Number(day[participant.key] ?? 0) + 1
+    month[participant.key] = Number(month[participant.key] ?? 0) + 1
   })
 
   return data
 }
 
-function createEmptyChartData(participants: ChartParticipant[], days: number) {
-  const today = startOfDay(new Date())
+function createEmptyChartData(participants: ChartParticipant[], months: number) {
+  const currentMonth = startOfMonth(new Date())
   const data: ChartDataPoint[] = []
 
-  for (let index = days - 1; index >= 0; index--) {
-    const date = subDays(today, index)
-    const item: ChartDataPoint = { date: toDateKey(date) }
+  for (let index = months - 1; index >= 0; index--) {
+    const date = subMonths(currentMonth, index)
+    const item: ChartDataPoint = { date: toMonthKey(date) }
 
     participants.forEach((participant) => {
       item[participant.key] = 0
@@ -386,12 +393,23 @@ function startOfDay(date: Date) {
   return nextDate
 }
 
-function toDateKey(date: Date) {
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1)
+}
+
+function subMonths(date: Date, months: number) {
+  const nextDate = new Date(date)
+
+  nextDate.setMonth(nextDate.getMonth() - months, 1)
+
+  return startOfMonth(nextDate)
+}
+
+function toMonthKey(date: Date) {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, "0")
-  const day = String(date.getDate()).padStart(2, "0")
 
-  return `${year}-${month}-${day}`
+  return `${year}-${month}-01`
 }
 
 function getFirstName(name: string) {

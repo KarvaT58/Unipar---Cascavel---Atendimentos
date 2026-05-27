@@ -10,9 +10,9 @@ import {
   UsersRoundIcon,
 } from "lucide-react"
 import {
-  Area as RechartsArea,
-  AreaChart as RechartsAreaChart,
   CartesianGrid as RechartsCartesianGrid,
+  Line as RechartsLine,
+  LineChart as RechartsLineChart,
   XAxis as RechartsXAxis,
 } from "recharts"
 
@@ -87,11 +87,12 @@ const dashboardChartColors = [
   "#fb7185",
   "#94a3b8",
 ]
+const DASHBOARD_CHART_MONTHS = 12
 
 const rangeOptions = [
-  { value: "90d", label: "Últimos 3 meses", days: 90 },
-  { value: "30d", label: "Últimos 30 dias", days: 30 },
-  { value: "7d", label: "Últimos 7 dias", days: 7 },
+  { value: "12m", label: "Últimos 12 meses", months: 12 },
+  { value: "6m", label: "Últimos 6 meses", months: 6 },
+  { value: "3m", label: "Últimos 3 meses", months: 3 },
 ] as const
 
 type TimeRange = (typeof rangeOptions)[number]["value"]
@@ -113,7 +114,7 @@ export function DashboardContent({
       chartParticipants,
       databaseError,
     })
-  const [timeRange, setTimeRange] = React.useState<TimeRange>("90d")
+  const [timeRange, setTimeRange] = React.useState<TimeRange>("12m")
   const {
     metrics: currentMetrics,
     sectorLabel: currentSectorLabel,
@@ -227,16 +228,17 @@ export function DashboardContent({
     const selectedRange =
       rangeOptions.find((option) => option.value === timeRange) ??
       rangeOptions[0]
-    const startDate = new Date(referenceDate)
-    startDate.setDate(startDate.getDate() - (selectedRange.days - 1))
+    const startDate = startOfMonth(
+      subMonths(referenceDate, selectedRange.months - 1)
+    )
 
     return currentChartData.filter((item) => parseDateKey(item.date) >= startDate)
   }, [currentChartData, timeRange])
 
   const visibleChartParticipants = React.useMemo(() => {
-    return currentChartParticipants.filter((participant) =>
-      filteredData.some((item) => Number(item[participant.key] ?? 0) > 0)
-    )
+    void filteredData
+
+    return currentChartParticipants
   }, [currentChartParticipants, filteredData])
 
   const hasChartValues = visibleChartParticipants.length > 0
@@ -266,21 +268,21 @@ export function DashboardContent({
                 Atendimentos resolvidos
               </CardTitle>
               <CardDescription>
-                {currentUserName} comparado com colegas do {currentSectorLabel}
+                Comparação mensal de {currentUserName} com colegas do {currentSectorLabel}
               </CardDescription>
             </div>
           </div>
           <Select
             value={timeRange}
             onValueChange={(value) =>
-              setTimeRange((value ?? "90d") as TimeRange)
+              setTimeRange((value ?? "12m") as TimeRange)
             }
           >
             <SelectTrigger
               className="w-full sm:ml-auto sm:w-[160px]"
               aria-label="Selecionar período"
             >
-              <SelectValue placeholder="Últimos 3 meses" />
+              <SelectValue placeholder="Últimos 12 meses" />
             </SelectTrigger>
             <SelectContent className="rounded-lg">
               {rangeOptions.map((option) => (
@@ -301,30 +303,7 @@ export function DashboardContent({
               config={chartConfig}
               className="aspect-auto h-[300px] w-full"
             >
-              <RechartsAreaChart data={filteredData}>
-                <defs>
-                  {visibleChartParticipants.map((participant) => (
-                    <linearGradient
-                      key={participant.key}
-                      id={`fill-${participant.key}`}
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop
-                        offset="5%"
-                        stopColor={participant.color}
-                        stopOpacity={0.55}
-                      />
-                      <stop
-                        offset="95%"
-                        stopColor={participant.color}
-                        stopOpacity={0.04}
-                      />
-                    </linearGradient>
-                  ))}
-                </defs>
+              <RechartsLineChart data={filteredData}>
                 <RechartsCartesianGrid vertical={false} />
                 <RechartsXAxis
                   dataKey="date"
@@ -334,8 +313,8 @@ export function DashboardContent({
                   minTickGap={28}
                   tickFormatter={(value: string) =>
                     parseDateKey(value).toLocaleDateString("pt-BR", {
-                      day: "2-digit",
                       month: "short",
+                      year: "2-digit",
                     })
                   }
                 />
@@ -345,7 +324,8 @@ export function DashboardContent({
                     <ChartTooltipContent
                       labelFormatter={(value) =>
                         parseDateKey(String(value)).toLocaleDateString("pt-BR", {
-                          dateStyle: "medium",
+                          month: "long",
+                          year: "numeric",
                         })
                       }
                       indicator="dot"
@@ -353,19 +333,19 @@ export function DashboardContent({
                   }
                 />
                 {visibleChartParticipants.map((participant) => (
-                  <RechartsArea
+                  <RechartsLine
                     key={participant.key}
                     dataKey={participant.key}
                     name={participant.name}
-                    type="natural"
-                    fill={`url(#fill-${participant.key})`}
+                    type="monotone"
                     stroke={participant.color}
                     strokeWidth={2.5}
                     dot={false}
+                    activeDot={{ r: 4 }}
                   />
                 ))}
                 <ChartLegend content={<ChartLegendContent />} />
-              </RechartsAreaChart>
+              </RechartsLineChart>
             </ChartContainer>
           ) : (
             <div className="flex h-[300px] items-center justify-center rounded-md border border-dashed border-border/80 bg-background/40 px-4 text-center text-sm text-muted-foreground">
@@ -424,7 +404,9 @@ function createDashboardData(
 ): DashboardContentProps {
   const now = new Date()
   const since30Days = startOfDay(subDays(now, 29))
-  const since90Days = startOfDay(subDays(now, 89))
+  const sinceChartStart = startOfMonth(
+    subMonths(now, DASHBOARD_CHART_MONTHS - 1)
+  )
   const tickets = state.serviceTickets
   const participants = buildParticipants(
     currentUser.id,
@@ -439,7 +421,7 @@ function createDashboardData(
     .filter(
       (ticket) =>
         ticket.status === "completed" &&
-        isOnOrAfter(ticket.closedAt, since90Days) &&
+        isOnOrAfter(ticket.closedAt, sinceChartStart) &&
         Boolean(ticket.closedById) &&
         participantUserIds.has(ticket.closedById ?? "")
     )
@@ -475,7 +457,11 @@ function createDashboardData(
       name: participant.name,
       color: participant.color,
     })),
-    chartData: createResolvedChartData(participants, resolvedTickets, 90),
+    chartData: createResolvedChartData(
+      participants,
+      resolvedTickets,
+      DASHBOARD_CHART_MONTHS
+    ),
     databaseError: undefined,
   }
 }
@@ -536,14 +522,14 @@ function buildParticipants(
 function createResolvedChartData(
   participants: ChartParticipant[],
   tickets: Array<{ resolvedAt: Date | null; resolvedById: string | null }>,
-  days: number
+  months: number
 ) {
   const participantByUserId = new Map(
     participants
       .filter((participant) => participant.userId)
       .map((participant) => [participant.userId, participant])
   )
-  const data = createEmptyChartData(participants, days)
+  const data = createEmptyChartData(participants, months)
   const dataByDate = new Map(data.map((item) => [item.date, item]))
 
   tickets.forEach((ticket) => {
@@ -552,25 +538,25 @@ function createResolvedChartData(
     }
 
     const participant = participantByUserId.get(ticket.resolvedById)
-    const day = dataByDate.get(toDateKey(ticket.resolvedAt))
+    const month = dataByDate.get(toMonthKey(ticket.resolvedAt))
 
-    if (!participant || !day) {
+    if (!participant || !month) {
       return
     }
 
-    day[participant.key] = Number(day[participant.key] ?? 0) + 1
+    month[participant.key] = Number(month[participant.key] ?? 0) + 1
   })
 
   return data
 }
 
-function createEmptyChartData(participants: ChartParticipant[], days: number) {
-  const today = startOfDay(new Date())
+function createEmptyChartData(participants: ChartParticipant[], months: number) {
+  const currentMonth = startOfMonth(new Date())
   const data: ChartDataPoint[] = []
 
-  for (let index = days - 1; index >= 0; index--) {
-    const date = subDays(today, index)
-    const item: ChartDataPoint = { date: toDateKey(date) }
+  for (let index = months - 1; index >= 0; index--) {
+    const date = subMonths(currentMonth, index)
+    const item: ChartDataPoint = { date: toMonthKey(date) }
 
     participants.forEach((participant) => {
       item[participant.key] = 0
@@ -621,12 +607,23 @@ function startOfDay(date: Date) {
   return nextDate
 }
 
-function toDateKey(date: Date) {
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1)
+}
+
+function subMonths(date: Date, months: number) {
+  const nextDate = new Date(date)
+
+  nextDate.setMonth(nextDate.getMonth() - months, 1)
+
+  return startOfMonth(nextDate)
+}
+
+function toMonthKey(date: Date) {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, "0")
-  const day = String(date.getDate()).padStart(2, "0")
 
-  return `${year}-${month}-${day}`
+  return `${year}-${month}-01`
 }
 
 function getFirstName(name: string) {
