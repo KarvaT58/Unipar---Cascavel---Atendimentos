@@ -108,7 +108,7 @@ export function validateUploadFile(file: File) {
   }
 
   if (!ALLOWED_MIME_TYPES.has(file.type)) {
-    throw new Error("Tipo de arquivo nao permitido.")
+    throw new Error("Tipo de arquivo não permitido.")
   }
 }
 

@@ -67,7 +67,7 @@ export async function GET() {
       sector: toUniparSector(user.sector),
       isAdmin: user.role === "ADMIN",
       avatar: "",
-      about: "Disponivel",
+      about: "Disponível",
       chatStatus: presence.chatStatus,
       workStatus: presence.workStatus,
       lastSeenAt: presence.lastSeenAt,

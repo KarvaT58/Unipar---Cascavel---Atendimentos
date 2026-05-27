@@ -10,12 +10,12 @@ export type UploadedFilePayload = {
 
 function getResponseMessage(payload: unknown) {
   if (!payload || typeof payload !== "object" || !("message" in payload)) {
-    return "Nao foi possivel enviar o arquivo."
+    return "Não foi possível enviar o arquivo."
   }
 
   const message = (payload as { message?: unknown }).message
 
-  return typeof message === "string" ? message : "Nao foi possivel enviar o arquivo."
+  return typeof message === "string" ? message : "Não foi possível enviar o arquivo."
 }
 
 function isUploadedFilePayload(payload: unknown): payload is UploadedFilePayload {
@@ -57,7 +57,7 @@ export async function uploadFileAttachment(
   }
 
   if (!isUploadedFilePayload(payload)) {
-    throw new Error("Resposta invalida do servidor de uploads.")
+    throw new Error("Resposta inválida do servidor de uploads.")
   }
 
   return payload

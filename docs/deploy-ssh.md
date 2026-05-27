@@ -20,7 +20,7 @@ cp .env.example .env
 nano .env
 ```
 
-Em producao, confira principalmente:
+Em produção, confira principalmente:
 
 ```bash
 NODE_ENV="production"
@@ -33,7 +33,7 @@ ALLOW_LOCAL_DATA_IN_PRODUCTION="false"
 ```
 
 O modo local salva dados em `.local-data/` e e apenas para desenvolvimento.
-Em producao ele fica bloqueado por padrao, mesmo que `LOCAL_DATA_ONLY` seja
+Em produção ele fica bloqueado por padrão, mesmo que `LOCAL_DATA_ONLY` seja
 ligado sem querer.
 
 ## 3. Instalar, preparar banco e compilar
@@ -45,9 +45,9 @@ npm run prisma:push
 npm run build
 ```
 
-Enquanto o projeto ainda nao usa migrations versionadas, `prisma db push` e o
+Enquanto o projeto ainda não usa migrations versionadas, `prisma db push` é o
 comando usado para sincronizar o schema. Quando o sistema estabilizar, troque o
-fluxo de producao para migrations.
+fluxo de produção para migrations.
 
 ## 4. Rodar com PM2
 
@@ -128,19 +128,19 @@ Com o app rodando:
 curl -fsS http://127.0.0.1:3000/api/health
 ```
 
-Em producao, o healthcheck deve retornar `ok: true` apenas com PostgreSQL
-configurado e acessivel.
+Em produção, o healthcheck deve retornar `ok: true` apenas com PostgreSQL
+configurado e acessível.
 
 ## 7. Uploads e avatar
 
-O avatar do perfil ainda e salvo como base64 no estado do app. Isso e pratico
-para a fase atual, mas aumenta o tamanho do estado se muitos usuarios enviarem
-imagens grandes. O codigo ja limita e comprime a imagem; no futuro, o ideal e
+O avatar do perfil ainda é salvo como base64 no estado do app. Isso é prático
+para a fase atual, mas aumenta o tamanho do estado se muitos usuários enviarem
+imagens grandes. O código já limita e comprime a imagem; no futuro, o ideal é
 salvar arquivos em storage dedicado, como disco persistente, S3 ou similar.
 
-## 8. Dependencias
+## 8. Dependências
 
 `npm audit` pode apontar vulnerabilidades moderadas transitivas em Next/Prisma.
-Nao rode `npm audit fix --force` sem revisar, porque ele pode instalar versoes
-incompativeis. Atualize Next e Prisma quando houver versoes compativeis que
+Não rode `npm audit fix --force` sem revisar, porque ele pode instalar versões
+incompatíveis. Atualize Next e Prisma quando houver versões compatíveis que
 corrijam os avisos.

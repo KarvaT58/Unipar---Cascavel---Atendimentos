@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 export function ComingSoonPage({ title }: { title: string }) {
   React.useEffect(() => {
     toast.info("Em breve", {
-      description: `${title} sera liberado futuramente.`,
+      description: `${title} será liberado futuramente.`,
     })
   }, [title])
 
@@ -22,14 +22,14 @@ export function ComingSoonPage({ title }: { title: string }) {
           </span>
           <h1 className="mt-4 text-xl font-semibold">{title}</h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Esta pagina sera liberada futuramente.
+            Esta página será liberada futuramente.
           </p>
           <Button
             type="button"
             className="mt-5"
             onClick={() =>
               toast.info("Em breve", {
-                description: `${title} ainda nao esta disponivel.`,
+                description: `${title} ainda não está disponível.`,
               })
             }
           >

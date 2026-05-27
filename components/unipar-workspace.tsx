@@ -1449,7 +1449,7 @@ export function UniparWorkspace({
           JSON.stringify(Array.from(priorityMessageKeys).slice(-300)),
         );
       } catch {
-        // localStorage pode estar indisponivel em alguns navegadores.
+        // localStorage pode estar indisponível em alguns navegadores.
       }
     },
     [currentAnnouncementUser.id],
@@ -4256,8 +4256,8 @@ export function UniparWorkspace({
       setSelectedGroup(null);
       setActiveSidePanel(null);
       setHighlightedMessageId(null);
-      toast.error("Grupo indisponivel.", {
-        description: "Voce nao participa deste grupo.",
+      toast.error("Grupo indisponível.", {
+        description: "Você não participa deste grupo.",
       });
       return;
     }
@@ -4496,12 +4496,12 @@ export function UniparWorkspace({
     if (!selectedGroup || !canManageSelectedGroup) return;
 
     if (selectedGroupMetadata?.creatorId === participantId) {
-      toast.error("O criador do grupo nao pode ser removido.");
+      toast.error("O criador do grupo não pode ser removido.");
       return;
     }
 
     if (participantId === currentAnnouncementUser.id) {
-      toast.error("Use a acao de sair do grupo para remover sua propria conta.");
+      toast.error("Use a ação de sair do grupo para remover sua própria conta.");
       return;
     }
 
@@ -4539,7 +4539,7 @@ export function UniparWorkspace({
       : [];
 
     if (!selectedGroupMemberIds.includes(participantId)) {
-      toast.error("Esse usuario nao faz parte do grupo.");
+      toast.error("Esse usuário não faz parte do grupo.");
       return;
     }
 
@@ -4585,7 +4585,7 @@ export function UniparWorkspace({
     });
     toast.success(
       wasAdmin
-        ? "Permissao de administrador removida."
+        ? "Permissão de administrador removida."
         : "Participante promovido a administrador.",
     );
   };
@@ -5814,7 +5814,7 @@ export function UniparWorkspace({
                   Aviso de vencimento
                 </DialogTitle>
                 <DialogDescription className="sr-only">
-                  Lembrete de cartao do Kanban vencendo hoje.
+                  Lembrete de cartão do Kanban vencendo hoje.
                 </DialogDescription>
               </DialogHeader>
 

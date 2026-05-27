@@ -50,7 +50,7 @@ export async function POST(request: Request) {
   } catch {
     if (!canUseOfflineFallback()) {
       return NextResponse.json(
-        { message: "Banco de dados indisponivel no momento." },
+        { message: "Banco de dados indisponível no momento." },
         { status: 503 }
       )
     }

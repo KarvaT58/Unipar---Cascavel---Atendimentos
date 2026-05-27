@@ -343,7 +343,7 @@ async function saveAppStateInDatabaseNow(
     }
   }
 
-  throw new Error("Nao foi possivel iniciar a transacao para salvar o estado.")
+  throw new Error("Não foi possível iniciar a transação para salvar o estado.")
 }
 
 export async function readRealtimeEvents(afterId: number) {

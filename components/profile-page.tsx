@@ -62,7 +62,7 @@ type ProfileState = {
   workStatus: UserWorkStatus
 }
 
-const DEFAULT_ABOUT = "Disponivel"
+const DEFAULT_ABOUT = "Disponível"
 const AVATAR_SIZE = 512
 const MAX_AVATAR_FILE_SIZE = 8 * 1024 * 1024
 
@@ -118,7 +118,7 @@ export function ProfilePage() {
       })
       .catch((error) => {
         console.error(error)
-        toast.error("Nao foi possivel carregar seu perfil.")
+        toast.error("Não foi possível carregar seu perfil.")
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false)
@@ -160,7 +160,7 @@ export function ProfilePage() {
     }
 
     if (file.size > MAX_AVATAR_FILE_SIZE) {
-      toast.error("A imagem precisa ter ate 8 MB.")
+      toast.error("A imagem precisa ter até 8 MB.")
       return
     }
 
@@ -173,7 +173,7 @@ export function ProfilePage() {
       toast.success("Foto carregada.")
     } catch (error) {
       console.error(error)
-      toast.error("Nao foi possivel carregar a foto.")
+      toast.error("Não foi possível carregar a foto.")
     } finally {
       setIsUploadingAvatar(false)
 
@@ -208,7 +208,7 @@ export function ProfilePage() {
       toast.success("Perfil atualizado.")
     } catch (error) {
       console.error(error)
-      toast.error("Nao foi possivel salvar o perfil.")
+      toast.error("Não foi possível salvar o perfil.")
     } finally {
       setIsSaving(false)
     }
@@ -239,7 +239,7 @@ export function ProfilePage() {
               <div>
                 <CardTitle className="text-xl">Perfil</CardTitle>
                 <CardDescription>
-                  Seus dados de exibicao, presenca e recado no sistema.
+                  Seus dados de exibição, presença e recado no sistema.
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
@@ -336,7 +336,7 @@ export function ProfilePage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="grid gap-2">
                   <Label htmlFor="profile-chat-status">
-                    Status de presenca
+                    Status de presença
                   </Label>
                   <Select
                     value={profile.chatStatus}
@@ -394,7 +394,7 @@ export function ProfilePage() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Aparece como recado/status nas paginas de equipe e contato.
+                    Aparece como recado/status nas páginas de equipe e contato.
                   </p>
                 </div>
               </div>
@@ -527,7 +527,7 @@ async function resizeAvatarImage(file: File) {
     const context = canvas.getContext("2d")
 
     if (!context) {
-      throw new Error("Canvas indisponivel.")
+      throw new Error("Canvas indisponível.")
     }
 
     context.fillStyle = "#111111"
@@ -545,7 +545,7 @@ function loadImage(src: string) {
     const image = new Image()
 
     image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error("Imagem invalida."))
+    image.onerror = () => reject(new Error("Imagem inválida."))
     image.src = src
   })
 }

@@ -48,7 +48,7 @@ export const USER_CHAT_STATUS_OPTIONS: Array<{
   {
     value: "online",
     label: "Online",
-    description: "Disponivel para conversas",
+    description: "Disponível para conversas",
   },
   {
     value: "busy",
@@ -74,12 +74,12 @@ export const USER_WORK_STATUS_OPTIONS: Array<{
 }> = [
   {
     value: "available",
-    label: "Disponivel",
+    label: "Disponível",
     description: "Atendimento normal",
   },
   {
     value: "meeting",
-    label: "Em reuniao",
+    label: "Em reunião",
     description: "Em compromisso interno",
   },
   {
@@ -95,22 +95,22 @@ export const USER_WORK_STATUS_OPTIONS: Array<{
   {
     value: "lunch",
     label: "Intervalo",
-    description: "Pausa ou almoco",
+    description: "Pausa ou almoço",
   },
   {
     value: "vacation",
-    label: "Ferias",
-    description: "Fora por periodo planejado",
+    label: "Férias",
+    description: "Fora por período planejado",
   },
   {
     value: "support",
     label: "Em suporte",
-    description: "Atendendo chamado ou usuario",
+    description: "Atendendo chamado ou usuário",
   },
   {
     value: "training",
     label: "Treinamento",
-    description: "Em capacitacao",
+    description: "Em capacitação",
   },
   {
     value: "external",
@@ -129,7 +129,7 @@ export function getUserChatStatusLabel(status?: UserChatStatus) {
 export function getUserWorkStatusLabel(status?: UserWorkStatus) {
   return (
     USER_WORK_STATUS_OPTIONS.find((option) => option.value === status)?.label ??
-    "Disponivel"
+    "Disponível"
   );
 }
 

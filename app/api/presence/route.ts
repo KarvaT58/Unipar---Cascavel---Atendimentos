@@ -28,7 +28,7 @@ export async function POST(request: Request) {
 
   if (!currentUser) {
     return NextResponse.json(
-      { message: "Sessao expirada. Faca login novamente." },
+      { message: "Sessão expirada. Faça login novamente." },
       { status: 401 }
     )
   }

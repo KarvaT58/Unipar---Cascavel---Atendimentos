@@ -289,7 +289,7 @@ function getEvidenceAttachmentSearchText(
     case "video":
       return `vídeo video ${attachment.title ?? ""} ${attachment.duration}`;
     case "audio":
-      return `áudio audio ${attachment.duration}`;
+      return `áudio ${attachment.duration}`;
     case "document":
       return `documento ${attachment.name} ${attachment.meta} ${attachment.extension}`;
     default:

@@ -23,7 +23,7 @@ export async function GET(request: Request) {
 
   if (!currentUser) {
     return Response.json(
-      { message: "Sessao expirada. Faca login novamente." },
+      { message: "Sessão expirada. Faça login novamente." },
       { status: 401 }
     )
   }

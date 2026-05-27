@@ -11,7 +11,7 @@ export async function GET() {
 
   if (!currentUser) {
     return NextResponse.json(
-      { message: "Sessao expirada. Faca login novamente." },
+      { message: "Sessão expirada. Faça login novamente." },
       { status: 401 }
     )
   }

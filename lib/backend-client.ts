@@ -184,7 +184,7 @@ export async function updateCurrentPresence(payload: PresenceUpdatePayload) {
   });
 
   if (!response.ok) {
-    throw new Error("Nao foi possivel atualizar sua presenca.");
+    throw new Error("Não foi possível atualizar sua presença.");
   }
 
   return response.json() as Promise<{ ok: boolean }>;
@@ -200,7 +200,7 @@ export async function publishTypingIndicator(payload: TypingIndicatorPayload) {
   });
 
   if (!response.ok) {
-    throw new Error("Nao foi possivel atualizar o indicador de digitacao.");
+    throw new Error("Não foi possível atualizar o indicador de digitação.");
   }
 
   return response.json() as Promise<{ ok: boolean }>;

@@ -23,7 +23,7 @@ export async function POST(request: Request) {
 
   if (!currentUser) {
     return NextResponse.json(
-      { message: "Sessao expirada. Faca login novamente." },
+      { message: "Sessão expirada. Faça login novamente." },
       { status: 401 }
     )
   }
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
 
   if (!scope || !targetId) {
     return NextResponse.json(
-      { message: "Indicador de digitacao invalido." },
+      { message: "Indicador de digitação inválido." },
       { status: 400 }
     )
   }

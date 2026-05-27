@@ -440,7 +440,7 @@ export function KanbanPage({
     );
     setNewCardTitle("");
     setActiveAddCardColumnId(null);
-    toast.success("Cartao criado.");
+    toast.success("Cartão criado.");
   };
 
   const createColumn = (event: FormEvent<HTMLFormElement>) => {
@@ -553,7 +553,7 @@ export function KanbanPage({
           : column,
       ),
     );
-    toast.success("Cartao duplicado.");
+    toast.success("Cartão duplicado.");
   };
 
   const deleteCard = (cardId: string) => {
@@ -569,7 +569,7 @@ export function KanbanPage({
       return nextCards;
     });
     if (selectedCardId === cardId) setSelectedCardId(null);
-    toast.success("Cartao apagado.");
+    toast.success("Cartão apagado.");
   };
 
   const toggleCardLabel = (labelId: string) => {
@@ -739,7 +739,7 @@ export function KanbanPage({
         <div className="min-w-0">
           <h2 className="text-sm font-semibold">Quadro Kanban</h2>
           <p className="text-xs text-muted-foreground">
-            {visibleCardCount} cartao{visibleCardCount === 1 ? "" : "s"}
+            {visibleCardCount} cartão{visibleCardCount === 1 ? "" : "s"}
           </p>
         </div>
 

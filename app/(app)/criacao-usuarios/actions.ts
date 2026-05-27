@@ -128,7 +128,7 @@ export async function getAccessRequestDetails(
     if (!canUseOfflineFallback()) {
       return {
         ok: false,
-        message: "Banco de dados indisponivel no momento.",
+        message: "Banco de dados indisponível no momento.",
       }
     }
 
@@ -195,7 +195,7 @@ export async function getUserDetails(
     if (!canUseOfflineFallback()) {
       return {
         ok: false,
-        message: "Banco de dados indisponivel no momento.",
+        message: "Banco de dados indisponível no momento.",
       }
     }
 
@@ -341,7 +341,7 @@ export async function saveUser(
     if (!canUseOfflineFallback()) {
       return {
         ok: false,
-        message: "Banco de dados indisponivel no momento.",
+        message: "Banco de dados indisponível no momento.",
       }
     }
 
@@ -407,7 +407,7 @@ export async function rejectAccessRequest(
     if (!canUseOfflineFallback()) {
       return {
         ok: false,
-        message: "Banco de dados indisponivel no momento.",
+        message: "Banco de dados indisponível no momento.",
       }
     }
 
@@ -486,7 +486,7 @@ export async function setUserBlocked(
     if (!canUseOfflineFallback()) {
       return {
         ok: false,
-        message: "Banco de dados indisponivel no momento.",
+        message: "Banco de dados indisponível no momento.",
       }
     }
 
@@ -540,7 +540,7 @@ export async function deleteUser(userId: string): Promise<ActionResult> {
     if (!canUseOfflineFallback()) {
       return {
         ok: false,
-        message: "Banco de dados indisponivel no momento.",
+        message: "Banco de dados indisponível no momento.",
       }
     }
 

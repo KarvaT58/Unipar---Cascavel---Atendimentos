@@ -139,8 +139,8 @@ const priorityOptions: Array<{
   description: string;
 }> = [
   { value: "low", label: "Baixa", description: "Pode aguardar atendimento" },
-  { value: "normal", label: "Normal", description: "Fluxo padrao do setor" },
-  { value: "high", label: "Alta", description: "Precisa de atencao rapida" },
+  { value: "normal", label: "Normal", description: "Fluxo padrão do setor" },
+  { value: "high", label: "Alta", description: "Precisa de atenção rápida" },
   { value: "urgent", label: "Urgente", description: "Impacto imediato" },
 ];
 const priorityComboboxOptions: ComboboxOption[] = priorityOptions;
@@ -153,7 +153,7 @@ const transferModeComboboxOptions: ComboboxOption[] = [
   {
     value: "user",
     label: "Para colega do meu setor",
-    description: "Enviar o chamado para alguem do seu setor",
+    description: "Enviar o chamado para alguém do seu setor",
   },
 ];
 const forceComboboxBelow = {

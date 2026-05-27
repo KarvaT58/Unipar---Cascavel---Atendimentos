@@ -1,11 +1,11 @@
 # Unipar - Cascavel - Atendimentos
 
-Sistema SaaS para atendimentos, chat interno, grupos, equipe, anuncios/eventos,
-emprestimos, kanban e administracao.
+Sistema SaaS para atendimentos, chat interno, grupos, equipe, anúncios/eventos,
+empréstimos, kanban e administração.
 
 ## Desenvolvimento local
 
-Instale as dependencias:
+Instale as dependências:
 
 ```bash
 npm install
@@ -21,8 +21,8 @@ LOCAL_AUTH_USER_EMAIL="dev@unipar.br"
 LOCAL_AUTH_USER_PASSWORD="12345678"
 ```
 
-Com isso, o app salva os dados em `.local-data/` e cria um usuario local para
-login. A pasta `.local-data/` nao deve ser enviada para o GitHub.
+Com isso, o app salva os dados em `.local-data/` e cria um usuário local para
+login. A pasta `.local-data/` não deve ser enviada para o GitHub.
 
 Rode o servidor:
 
@@ -32,9 +32,9 @@ npm run dev
 
 Acesse `http://localhost:3000`.
 
-## Producao
+## Produção
 
-Em producao, use PostgreSQL e mantenha o modo local desligado:
+Em produção, use PostgreSQL e mantenha o modo local desligado:
 
 ```bash
 NODE_ENV="production"
@@ -44,7 +44,7 @@ LOCAL_AUTH_USER_SEED="false"
 ALLOW_LOCAL_DATA_IN_PRODUCTION="false"
 ```
 
-Configure tambem:
+Configure também:
 
 ```bash
 SESSION_SECRET="uma-chave-com-32-caracteres-ou-mais"
@@ -74,11 +74,11 @@ Com o app rodando:
 curl http://localhost:3000/api/health
 ```
 
-O endpoint retorna o estado do app, modo local e conexao com banco. Em producao,
-ele so deve retornar `ok: true` quando o PostgreSQL estiver configurado e
+O endpoint retorna o estado do app, modo local e conexão com banco. Em produção,
+ele só deve retornar `ok: true` quando o PostgreSQL estiver configurado e
 respondendo.
 
-## Validacao
+## Validação
 
 Antes de publicar:
 
@@ -89,8 +89,8 @@ npm run build
 
 ## Observacoes
 
-- Avatar do perfil ainda e salvo como base64 no estado do sistema. Isso e
-  suficiente para a fase atual, mas o ideal futuro e mover uploads para storage
+- Avatar do perfil ainda é salvo como base64 no estado do sistema. Isso é
+  suficiente para a fase atual, mas o ideal futuro é mover uploads para storage
   dedicado.
-- Nao use `npm audit fix --force` sem revisar. O audit pode sugerir mudancas
+- Não use `npm audit fix --force` sem revisar. O audit pode sugerir mudanças
   quebrando Next/Prisma.

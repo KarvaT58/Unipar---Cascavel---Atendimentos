@@ -70,7 +70,7 @@ export function NavUser({
   function handleComingSoon(feature: string) {
     setOpen(false)
     toast.info("Em breve", {
-      description: `${feature} sera liberado futuramente.`,
+      description: `${feature} será liberado futuramente.`,
     })
   }
 
@@ -195,7 +195,7 @@ export function NavUser({
               <DropdownMenuGroup>
                 <DropdownMenuItem
                   className="[&_svg]:!text-primary [&_svg_*]:!text-primary"
-                  onClick={() => handleComingSoon("Estatistica da conta")}
+                  onClick={() => handleComingSoon("Estatística da conta")}
                 >
                   <ChartNoAxesCombinedIcon className="!text-primary" />
                   Estatística da conta
@@ -211,13 +211,13 @@ export function NavUser({
                   Perfil
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => handleComingSoon("Relatorios")}
+                  onClick={() => handleComingSoon("Relatórios")}
                 >
                   <ChartNoAxesColumnIcon />
                   Relatórios
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => handleComingSoon("Notificacoes")}
+                  onClick={() => handleComingSoon("Notificações")}
                 >
                   <BellIcon />
                   Notificações

@@ -228,10 +228,10 @@ export function TeamDirectory({ users }: TeamDirectoryProps) {
           {filteredUsers.length ? (
             <div className="min-w-[1180px]">
               <div className="grid grid-cols-[1.15fr_0.7fr_1.2fr_0.68fr_0.75fr_0.55fr_0.9fr_42px] gap-3 border-b bg-muted/30 px-3 py-2 text-xs font-semibold uppercase text-muted-foreground">
-                <span>Usuario</span>
+                <span>Usuário</span>
                 <span>Telefone</span>
                 <span>E-mail</span>
-                <span>Presenca</span>
+                <span>Presença</span>
                 <span>Status</span>
                 <span>Perfil</span>
                 <span>Setor</span>
@@ -260,13 +260,13 @@ export function TeamDirectory({ users }: TeamDirectoryProps) {
         </CardContent>
 
         <div className="flex items-center justify-between gap-3 border-t px-3 py-2 text-sm">
-          <span className="text-xs text-muted-foreground">PÃ¡gina</span>
+          <span className="text-xs text-muted-foreground">Página</span>
           <div className="flex items-center gap-1">
             <Button
               type="button"
               size="icon-sm"
               variant="outline"
-              aria-label="PÃ¡gina anterior"
+              aria-label="Página anterior"
               disabled={safePage <= 1}
               onClick={() => setPage(safePage - 1)}
             >
@@ -279,7 +279,7 @@ export function TeamDirectory({ users }: TeamDirectoryProps) {
               type="button"
               size="icon-sm"
               variant="outline"
-              aria-label="PrÃ³xima pÃ¡gina"
+              aria-label="Próxima página"
               disabled={safePage >= totalPages}
               onClick={() => setPage(safePage + 1)}
             >

@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           message:
-            "Banco de dados indisponivel no momento. Tente novamente em instantes.",
+            "Banco de dados indisponível no momento. Tente novamente em instantes.",
         },
         { status: 503 }
       )
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         message:
-          "Banco de dados indisponivel no momento. O usuario local inicial nao foi criado.",
+          "Banco de dados indisponível no momento. O usuário local inicial não foi criado.",
       },
       { status: 503 }
     )
@@ -122,7 +122,7 @@ async function loginOfflineUser(
 
   if (!offlineUser) {
     return NextResponse.json(
-      { message: "Usuario local nao encontrado." },
+      { message: "Usuário local não encontrado." },
       { status: 503 }
     )
   }
@@ -155,7 +155,7 @@ async function loginOfflineUser(
 
 function invalidCredentialsResponse() {
   return NextResponse.json(
-    { message: "E-mail ou senha invalidos." },
+    { message: "E-mail ou senha inválidos." },
     { status: 401 }
   )
 }

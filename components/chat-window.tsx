@@ -365,7 +365,7 @@ function formatRecordingTime(seconds: number) {
 function getClientErrorMessage(error: unknown) {
   return error instanceof Error
     ? error.message
-    : "Nao foi possivel concluir a operacao.";
+    : "Não foi possível concluir a operação.";
 }
 
 function getAudioFileExtension(mimeType: string) {
@@ -576,7 +576,7 @@ function AudioMessageAttachmentPreview({
             ? "text-primary-foreground hover:bg-black/10"
             : "text-foreground hover:bg-muted/60",
         )}
-        aria-label={isPlaying ? "Pausar audio" : "Reproduzir audio"}
+        aria-label={isPlaying ? "Pausar áudio" : "Reproduzir áudio"}
       >
         {isPlaying ? (
           <Pause className="h-5 w-5 fill-current" />
@@ -598,7 +598,7 @@ function AudioMessageAttachmentPreview({
           disabled={!attachment.src}
           onClick={handleSeek}
           className="relative inline-flex h-9 max-w-full items-center gap-0.5 px-1.5 align-middle"
-          aria-label="Avancar ou voltar audio"
+          aria-label="Avançar ou voltar áudio"
         >
           <span
             className="pointer-events-none absolute top-1/2 z-10 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-sky-400 shadow-sm transition-[left] duration-75"
@@ -1595,8 +1595,8 @@ export function ChatWindow({
     if (rejectedUploads.length > 0) {
       toast.error(
         rejectedUploads.length === 1
-          ? "Nao foi possivel enviar 1 anexo."
-          : `Nao foi possivel enviar ${rejectedUploads.length} anexos.`,
+          ? "Não foi possível enviar 1 anexo."
+          : `Não foi possível enviar ${rejectedUploads.length} anexos.`,
         {
           description: getClientErrorMessage(
             rejectedUploads[0].status === "rejected"
@@ -2008,7 +2008,7 @@ export function ChatWindow({
       stopRecordingInput();
 
       if (!recordedAudio) {
-        toast.error("Nao foi possivel capturar o audio gravado.");
+        toast.error("Não foi possível capturar o áudio gravado.");
         return;
       }
 
@@ -2044,7 +2044,7 @@ export function ChatWindow({
       setIsPriority(false);
     } catch (error) {
       stopRecordingInput();
-      toast.error("Nao foi possivel enviar o audio.", {
+      toast.error("Não foi possível enviar o áudio.", {
         description: getClientErrorMessage(error),
       });
     } finally {
@@ -2843,7 +2843,7 @@ export function ChatWindow({
             Deseja apagar esta gravação?
           </DialogTitle>
           <DialogDescription className="sr-only">
-            Confirme se deseja descartar o audio gravado.
+            Confirme se deseja descartar o áudio gravado.
           </DialogDescription>
           <p className="text-sm text-muted-foreground">
             O áudio gravado será descartado e não poderá ser enviado.

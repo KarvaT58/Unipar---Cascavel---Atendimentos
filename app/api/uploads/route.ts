@@ -18,7 +18,7 @@ export async function POST(request: Request) {
 
   if (!currentUser) {
     return NextResponse.json(
-      { message: "Sessao expirada. Faca login novamente." },
+      { message: "Sessão expirada. Faça login novamente." },
       { status: 401 }
     )
   }
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
 
     if (!(file instanceof File)) {
       return NextResponse.json(
-        { message: "Envie um arquivo valido." },
+        { message: "Envie um arquivo válido." },
         { status: 400 }
       )
     }
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     }
 
     const message =
-      error instanceof Error ? error.message : "Nao foi possivel enviar o arquivo."
+      error instanceof Error ? error.message : "Não foi possível enviar o arquivo."
 
     return NextResponse.json({ message }, { status: 400 })
   }

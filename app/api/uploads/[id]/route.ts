@@ -26,7 +26,7 @@ export async function GET(_request: Request, context: UploadRouteContext) {
 
   if (!currentUser) {
     return NextResponse.json(
-      { message: "Sessao expirada. Faca login novamente." },
+      { message: "Sessão expirada. Faça login novamente." },
       { status: 401 }
     )
   }
@@ -38,7 +38,7 @@ export async function GET(_request: Request, context: UploadRouteContext) {
 
   if (!upload) {
     return NextResponse.json(
-      { message: "Arquivo nao encontrado." },
+      { message: "Arquivo não encontrado." },
       { status: 404 }
     )
   }
@@ -57,7 +57,7 @@ export async function GET(_request: Request, context: UploadRouteContext) {
     })
   } catch {
     return NextResponse.json(
-      { message: "Arquivo nao encontrado no armazenamento." },
+      { message: "Arquivo não encontrado no armazenamento." },
       { status: 404 }
     )
   }

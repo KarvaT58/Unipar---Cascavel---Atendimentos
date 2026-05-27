@@ -847,7 +847,7 @@ function assertOfflineFallbackEnabled() {
 }
 
 function logOfflineAdminSeedError(error: unknown) {
-  console.warn("Nao foi possivel criar o usuario local inicial.", error)
+  console.warn("Não foi possível criar o usuário local inicial.", error)
 }
 
 function offlineDisabledResult(): OfflineWriteResult {
