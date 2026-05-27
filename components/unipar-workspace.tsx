@@ -1121,6 +1121,7 @@ export function UniparWorkspace({
         name: currentSessionUser.name,
         avatar: currentSessionUser.avatar,
         email: currentSessionUser.email,
+        sector: currentSessionUser.sector,
         about: getProfileAbout(currentSessionUser.about),
         isOnline: chatStatus === "online",
         chatStatus,
@@ -1330,6 +1331,9 @@ export function UniparWorkspace({
                 user.name,
               )}&background=10b981&color=fff`,
           email: user.email,
+          sector: isCurrentUser
+            ? currentAnnouncementUser.sector
+            : user.sector,
           about: isCurrentUser
             ? currentAnnouncementUser.about
             : getProfileAbout(user.about),

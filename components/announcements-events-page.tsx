@@ -86,6 +86,7 @@ export interface AnnouncementEvent {
 
 interface RecipientOption extends DirectoryUser {
   sector: Sector;
+  sectorLabel: string;
 }
 
 interface EventFormValues {
@@ -141,6 +142,38 @@ const EVENT_COLORS = [
   "border-l-amber-500 bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100",
   "border-l-rose-500 bg-rose-50 text-rose-950 dark:bg-rose-950/30 dark:text-rose-100",
 ];
+
+function normalizeSectorText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function getWorkspaceSectorOption(value?: string | null) {
+  if (!value) return undefined;
+
+  const normalizedValue = normalizeSectorText(value);
+
+  return workspaceSectorComboboxOptions.find((option) =>
+    [option.value, option.label, option.description, option.code]
+      .filter((entry): entry is string => Boolean(entry))
+      .some((entry) => normalizeSectorText(entry) === normalizedValue),
+  );
+}
+
+function getRecipientSector(recipient: DirectoryUser): Sector {
+  const sectorOption = getWorkspaceSectorOption(recipient.sector);
+
+  return (sectorOption?.value as Sector | undefined) ?? SECTOR_OPTIONS[0];
+}
+
+function getRecipientSectorLabel(sector: Sector) {
+  const sectorOption = getWorkspaceSectorOption(sector);
+
+  return sectorOption?.label ?? sector;
+}
 
 function getDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
@@ -470,10 +503,15 @@ export function AnnouncementsEventsPage({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recipientOptions = useMemo<RecipientOption[]>(
     () =>
-      recipients.map((recipient, index) => ({
-        ...recipient,
-        sector: SECTOR_OPTIONS[index % SECTOR_OPTIONS.length],
-      })),
+      recipients.map((recipient) => {
+        const sector = getRecipientSector(recipient);
+
+        return {
+          ...recipient,
+          sector,
+          sectorLabel: getRecipientSectorLabel(sector),
+        };
+      }),
     [recipients],
   );
   const recipientIds = useMemo(
@@ -545,7 +583,7 @@ export function AnnouncementsEventsPage({
     if (!normalizedSearch) return recipientOptions;
 
     return recipientOptions.filter((recipient) =>
-      [recipient.name, recipient.email, recipient.sector]
+      [recipient.name, recipient.email, recipient.sector, recipient.sectorLabel]
         .join(" ")
         .toLowerCase()
         .includes(normalizedSearch),
@@ -1323,7 +1361,7 @@ export function AnnouncementsEventsPage({
                             {recipient.name}
                           </span>
                           <span className="block truncate text-xs text-muted-foreground">
-                            {recipient.email} • {recipient.sector}
+                            {recipient.email} • {recipient.sectorLabel}
                           </span>
                         </span>
                       </label>

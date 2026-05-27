@@ -259,6 +259,7 @@ export interface DirectoryUser {
   name: string;
   avatar: string;
   email: string;
+  sector?: string;
   about: string;
   isOnline: boolean;
   chatStatus?: ChatPresenceStatus;
