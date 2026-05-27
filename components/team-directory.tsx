@@ -397,10 +397,40 @@ function PresencePill({ status }: { status?: UserChatStatus }) {
 
 function WorkStatusPill({ status }: { status?: UserWorkStatus }) {
   return (
-    <span className="inline-flex max-w-full items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+    <span
+      className={cn(
+        "inline-flex h-6 min-w-0 max-w-[9.5rem] justify-self-start rounded-full border px-2.5 text-xs font-semibold leading-6",
+        getWorkStatusPillClassName(status)
+      )}
+    >
       <span className="truncate">{getUserWorkStatusLabel(status)}</span>
     </span>
   )
+}
+
+function getWorkStatusPillClassName(status?: UserWorkStatus) {
+  switch (status ?? "available") {
+    case "available":
+      return "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+    case "meeting":
+      return "border-sky-500/40 bg-sky-500/10 text-sky-300"
+    case "home-office":
+      return "border-cyan-500/40 bg-cyan-500/10 text-cyan-300"
+    case "focus":
+      return "border-amber-500/40 bg-amber-500/10 text-amber-300"
+    case "lunch":
+      return "border-orange-500/40 bg-orange-500/10 text-orange-300"
+    case "vacation":
+      return "border-rose-500/40 bg-rose-500/10 text-rose-300"
+    case "support":
+      return "border-red-500/40 bg-red-500/10 text-red-300"
+    case "training":
+      return "border-violet-500/40 bg-violet-500/10 text-violet-300"
+    case "external":
+      return "border-slate-500/50 bg-slate-500/10 text-slate-300"
+    default:
+      return "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+  }
 }
 
 function RolePill({ role }: { role: TeamUser["role"] }) {
