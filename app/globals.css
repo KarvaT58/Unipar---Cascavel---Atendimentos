@@ -49,12 +49,12 @@
 }
 
 :root {
-  --chat-outgoing: color-mix(in oklch, var(--primary) 12%, var(--background));
+  --chat-outgoing: var(--secondary);
   --chat-incoming: var(--card);
 }
 
 .dark {
-  --chat-outgoing: color-mix(in oklch, var(--primary) 24%, var(--card));
+  --chat-outgoing: var(--secondary);
   --chat-incoming: var(--card);
 }
 
