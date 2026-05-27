@@ -7,7 +7,7 @@ import type { ServiceTicket } from "@/lib/service-ticket-data"
 export const dynamic = "force-dynamic"
 
 const currentUserChartColor = "#ff0018"
-const DASHBOARD_CHART_MONTHS = 12
+const DASHBOARD_CHART_DAYS = 90
 
 type ChartParticipant = {
   key: string
@@ -46,9 +46,7 @@ async function getDashboardData() {
     const { state } = await readAppState()
     const now = new Date()
     const since30Days = startOfDay(subDays(now, 29))
-    const sinceChartStart = startOfMonth(
-      subMonths(now, DASHBOARD_CHART_MONTHS - 1)
-    )
+    const sinceChartStart = startOfDay(subDays(now, DASHBOARD_CHART_DAYS - 1))
     const tickets = state.serviceTickets
     const participants = buildParticipants(currentUser)
     const resolvedTickets = tickets
@@ -93,7 +91,7 @@ async function getDashboardData() {
       chartData: createResolvedChartData(
         participants,
         resolvedTickets,
-        DASHBOARD_CHART_MONTHS
+        DASHBOARD_CHART_DAYS
       ),
       databaseError: undefined,
     }
@@ -125,7 +123,7 @@ function createFallbackDashboardData(options?: {
     sectorLabel: options?.sectorLabel ?? "seu setor",
     userName: options?.userName ?? "Você",
     chartParticipants: participants,
-    chartData: createEmptyChartData(participants, DASHBOARD_CHART_MONTHS),
+    chartData: createEmptyChartData(participants, DASHBOARD_CHART_DAYS),
     databaseError: undefined as string | undefined,
   }
 }
@@ -259,14 +257,14 @@ function getSectorByCode(code: string): Sector | undefined {
 function createResolvedChartData(
   participants: ChartParticipant[],
   tickets: Array<{ resolvedAt: Date | null; resolvedById: string | null }>,
-  months: number
+  days: number
 ) {
   const participantByUserId = new Map(
     participants
       .filter((participant) => participant.userId)
       .map((participant) => [participant.userId, participant])
   )
-  const data = createEmptyChartData(participants, months)
+  const data = createEmptyChartData(participants, days)
   const dataByDate = new Map(data.map((item) => [item.date, item]))
 
   tickets.forEach((ticket) => {
@@ -275,25 +273,25 @@ function createResolvedChartData(
     }
 
     const participant = participantByUserId.get(ticket.resolvedById)
-    const month = dataByDate.get(toMonthKey(ticket.resolvedAt))
+    const day = dataByDate.get(toDateKey(ticket.resolvedAt))
 
-    if (!participant || !month) {
+    if (!participant || !day) {
       return
     }
 
-    month[participant.key] = Number(month[participant.key] ?? 0) + 1
+    day[participant.key] = Number(day[participant.key] ?? 0) + 1
   })
 
   return data
 }
 
-function createEmptyChartData(participants: ChartParticipant[], months: number) {
-  const currentMonth = startOfMonth(new Date())
+function createEmptyChartData(participants: ChartParticipant[], days: number) {
+  const currentDay = startOfDay(new Date())
   const data: ChartDataPoint[] = []
 
-  for (let index = months - 1; index >= 0; index--) {
-    const date = subMonths(currentMonth, index)
-    const item: ChartDataPoint = { date: toMonthKey(date) }
+  for (let index = days - 1; index >= 0; index--) {
+    const date = subDays(currentDay, index)
+    const item: ChartDataPoint = { date: toDateKey(date) }
 
     participants.forEach((participant) => {
       item[participant.key] = 0
@@ -321,22 +319,11 @@ function startOfDay(date: Date) {
   return nextDate
 }
 
-function startOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1)
-}
-
-function subMonths(date: Date, months: number) {
-  const nextDate = new Date(date)
-
-  nextDate.setMonth(nextDate.getMonth() - months, 1)
-
-  return startOfMonth(nextDate)
-}
-
-function toMonthKey(date: Date) {
+function toDateKey(date: Date) {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
 
-  return `${year}-${month}-01`
+  return `${year}-${month}-${day}`
 }
 

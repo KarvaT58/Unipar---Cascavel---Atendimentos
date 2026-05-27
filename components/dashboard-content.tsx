@@ -76,12 +76,12 @@ type DashboardContentProps = {
 }
 
 const dashboardCurrentUserColor = "#ff0018"
-const DASHBOARD_CHART_MONTHS = 12
+const DASHBOARD_CHART_DAYS = 90
 
 const rangeOptions = [
-  { value: "12m", label: "Últimos 12 meses", months: 12 },
-  { value: "6m", label: "Últimos 6 meses", months: 6 },
-  { value: "3m", label: "Últimos 3 meses", months: 3 },
+  { value: "90d", label: "Últimos 90 dias", days: 90 },
+  { value: "30d", label: "Últimos 30 dias", days: 30 },
+  { value: "7d", label: "Últimos 7 dias", days: 7 },
 ] as const
 
 type TimeRange = (typeof rangeOptions)[number]["value"]
@@ -103,7 +103,7 @@ export function DashboardContent({
       chartParticipants,
       databaseError,
     })
-  const [timeRange, setTimeRange] = React.useState<TimeRange>("12m")
+  const [timeRange, setTimeRange] = React.useState<TimeRange>("90d")
   const {
     metrics: currentMetrics,
     sectorLabel: currentSectorLabel,
@@ -217,8 +217,8 @@ export function DashboardContent({
     const selectedRange =
       rangeOptions.find((option) => option.value === timeRange) ??
       rangeOptions[0]
-    const startDate = startOfMonth(
-      subMonths(referenceDate, selectedRange.months - 1)
+    const startDate = startOfDay(
+      subDays(referenceDate, selectedRange.days - 1)
     )
 
     return currentChartData.filter((item) => parseDateKey(item.date) >= startDate)
@@ -257,21 +257,21 @@ export function DashboardContent({
                 Atendimentos resolvidos
               </CardTitle>
               <CardDescription>
-                Atendimentos mensais de {currentUserName}
+                Atendimentos diários de {currentUserName}
               </CardDescription>
             </div>
           </div>
           <Select
             value={timeRange}
             onValueChange={(value) =>
-              setTimeRange((value ?? "12m") as TimeRange)
+              setTimeRange((value ?? "90d") as TimeRange)
             }
           >
             <SelectTrigger
               className="w-full sm:ml-auto sm:w-[160px]"
               aria-label="Selecionar período"
             >
-              <SelectValue placeholder="Últimos 12 meses" />
+              <SelectValue placeholder="Últimos 90 dias" />
             </SelectTrigger>
             <SelectContent className="rounded-lg">
               {rangeOptions.map((option) => (
@@ -302,8 +302,8 @@ export function DashboardContent({
                   minTickGap={28}
                   tickFormatter={(value: string) =>
                     parseDateKey(value).toLocaleDateString("pt-BR", {
+                      day: "2-digit",
                       month: "short",
-                      year: "2-digit",
                     })
                   }
                 />
@@ -313,6 +313,7 @@ export function DashboardContent({
                     <ChartTooltipContent
                       labelFormatter={(value) =>
                         parseDateKey(String(value)).toLocaleDateString("pt-BR", {
+                          day: "2-digit",
                           month: "long",
                           year: "numeric",
                         })
@@ -393,9 +394,7 @@ function createDashboardData(
 ): DashboardContentProps {
   const now = new Date()
   const since30Days = startOfDay(subDays(now, 29))
-  const sinceChartStart = startOfMonth(
-    subMonths(now, DASHBOARD_CHART_MONTHS - 1)
-  )
+  const sinceChartStart = startOfDay(subDays(now, DASHBOARD_CHART_DAYS - 1))
   const tickets = state.serviceTickets
   const participants = buildParticipants(currentUser)
   const resolvedTickets = tickets
@@ -440,7 +439,7 @@ function createDashboardData(
     chartData: createResolvedChartData(
       participants,
       resolvedTickets,
-      DASHBOARD_CHART_MONTHS
+      DASHBOARD_CHART_DAYS
     ),
     databaseError: undefined,
   }
@@ -462,14 +461,14 @@ function buildParticipants(
 function createResolvedChartData(
   participants: ChartParticipant[],
   tickets: Array<{ resolvedAt: Date | null; resolvedById: string | null }>,
-  months: number
+  days: number
 ) {
   const participantByUserId = new Map(
     participants
       .filter((participant) => participant.userId)
       .map((participant) => [participant.userId, participant])
   )
-  const data = createEmptyChartData(participants, months)
+  const data = createEmptyChartData(participants, days)
   const dataByDate = new Map(data.map((item) => [item.date, item]))
 
   tickets.forEach((ticket) => {
@@ -478,25 +477,25 @@ function createResolvedChartData(
     }
 
     const participant = participantByUserId.get(ticket.resolvedById)
-    const month = dataByDate.get(toMonthKey(ticket.resolvedAt))
+    const day = dataByDate.get(toDateKey(ticket.resolvedAt))
 
-    if (!participant || !month) {
+    if (!participant || !day) {
       return
     }
 
-    month[participant.key] = Number(month[participant.key] ?? 0) + 1
+    day[participant.key] = Number(day[participant.key] ?? 0) + 1
   })
 
   return data
 }
 
-function createEmptyChartData(participants: ChartParticipant[], months: number) {
-  const currentMonth = startOfMonth(new Date())
+function createEmptyChartData(participants: ChartParticipant[], days: number) {
+  const currentDay = startOfDay(new Date())
   const data: ChartDataPoint[] = []
 
-  for (let index = months - 1; index >= 0; index--) {
-    const date = subMonths(currentMonth, index)
-    const item: ChartDataPoint = { date: toMonthKey(date) }
+  for (let index = days - 1; index >= 0; index--) {
+    const date = subDays(currentDay, index)
+    const item: ChartDataPoint = { date: toDateKey(date) }
 
     participants.forEach((participant) => {
       item[participant.key] = 0
@@ -547,23 +546,12 @@ function startOfDay(date: Date) {
   return nextDate
 }
 
-function startOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1)
-}
-
-function subMonths(date: Date, months: number) {
-  const nextDate = new Date(date)
-
-  nextDate.setMonth(nextDate.getMonth() - months, 1)
-
-  return startOfMonth(nextDate)
-}
-
-function toMonthKey(date: Date) {
+function toDateKey(date: Date) {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
 
-  return `${year}-${month}-01`
+  return `${year}-${month}-${day}`
 }
 
 function getReferenceDate(chartData: ChartDataPoint[]) {
