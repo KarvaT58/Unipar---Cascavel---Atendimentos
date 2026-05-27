@@ -1482,6 +1482,20 @@ export function UniparWorkspace({
     },
     [storeSeenPriorityMessageKeys],
   );
+  const markPriorityMessageAlertSeen = useCallback(
+    (priorityAlert: PriorityMessageAlert) => {
+      if (!priorityAlert) return;
+
+      addSeenPriorityMessageKeys([
+        getPriorityMessageAlertKey(
+          priorityAlert.scope,
+          priorityAlert.conversation.id,
+          priorityAlert.message,
+        ),
+      ]);
+    },
+    [addSeenPriorityMessageKeys],
+  );
 
   useEffect(() => {
     messageNotificationAudioRef.current = new Audio(NOTIFICATION_SOUND_SRC);
@@ -2723,95 +2737,6 @@ export function UniparWorkspace({
   const activeLoanReminder = activeLoanReminderId
     ? (loanRequests.find((loan) => loan.id === activeLoanReminderId) ?? null)
     : null;
-  const getAvailablePriorityMessageAlertKeys = useCallback(() => {
-    const priorityMessageKeys = new Set<string>();
-
-    if (!isAuthenticated || !currentAnnouncementUser.id) {
-      return priorityMessageKeys;
-    }
-
-    const currentUserId = currentAnnouncementUser.id;
-
-    for (const [conversationId, messages] of Object.entries(
-      messagesByContact,
-    )) {
-      const directParticipants = parseDirectConversationKey(conversationId);
-      const directContactId = directParticipants
-        ? directParticipants[0] === currentUserId
-          ? directParticipants[1]
-          : directParticipants[1] === currentUserId
-            ? directParticipants[0]
-            : null
-        : null;
-
-      if (!directContactId && conversationId !== currentUserId) continue;
-
-      messages.forEach((currentMessage) => {
-        if (
-          !currentMessage.isPriority ||
-          currentMessage.deletedForEveryone ||
-          isMessageHiddenForUser(currentMessage, currentUserId)
-        ) {
-          return;
-        }
-
-        if (
-          !currentMessage.senderId ||
-          currentMessage.senderId === currentUserId
-        ) {
-          return;
-        }
-
-        const alertContactId =
-          directContactId ?? currentMessage.senderId ?? conversationId;
-
-        if (activeNav === "chat" && selectedContact?.id === alertContactId) {
-          return;
-        }
-
-        priorityMessageKeys.add(
-          getPriorityMessageAlertKey("chat", alertContactId, currentMessage),
-        );
-      });
-    }
-
-    for (const [groupId, messages] of Object.entries(groupMessagesByContact)) {
-      if (!canUserSeeGroup(groupId, currentUserId, groupMetadataById)) continue;
-      if (activeNav === "grupos" && selectedGroup?.id === groupId) continue;
-
-      messages.forEach((currentMessage) => {
-        if (
-          !currentMessage.isPriority ||
-          currentMessage.deletedForEveryone ||
-          isMessageHiddenForUser(currentMessage, currentUserId)
-        ) {
-          return;
-        }
-
-        if (
-          !currentMessage.senderId ||
-          currentMessage.senderId === currentUserId
-        ) {
-          return;
-        }
-
-        priorityMessageKeys.add(
-          getPriorityMessageAlertKey("group", groupId, currentMessage),
-        );
-      });
-    }
-
-    return priorityMessageKeys;
-  }, [
-    activeNav,
-    currentAnnouncementUser.id,
-    groupMessagesByContact,
-    groupMetadataById,
-    isAuthenticated,
-    messagesByContact,
-    selectedContact?.id,
-    selectedGroup?.id,
-  ]);
   const findPriorityMessageAlert = useCallback((): PriorityMessageAlert => {
     if (!isAuthenticated || !currentAnnouncementUser.id) return null;
 
@@ -2860,10 +2785,6 @@ export function UniparWorkspace({
         const alertContactId =
           directContactId ?? currentMessage.senderId ?? conversationId;
 
-        if (activeNav === "chat" && selectedContact?.id === alertContactId) {
-          return false;
-        }
-
         return !seenKeys.has(
           getPriorityMessageAlertKey("chat", alertContactId, currentMessage),
         );
@@ -2910,7 +2831,6 @@ export function UniparWorkspace({
 
     for (const [groupId, messages] of Object.entries(groupMessagesByContact)) {
       if (!canUserSeeGroup(groupId, currentUserId, groupMetadataById)) continue;
-      if (activeNav === "grupos" && selectedGroup?.id === groupId) continue;
 
       const message = messages.find((currentMessage) => {
         if (
@@ -2949,7 +2869,6 @@ export function UniparWorkspace({
 
     return null;
   }, [
-    activeNav,
     archivedContacts,
     archivedGroups,
     contacts,
@@ -2961,8 +2880,6 @@ export function UniparWorkspace({
     groups,
     isAuthenticated,
     messagesByContact,
-    selectedContact?.id,
-    selectedGroup?.id,
   ]);
   const reminderCandidate = useMemo(() => {
     if (!isAuthenticated) return null;
@@ -3220,20 +3137,14 @@ export function UniparWorkspace({
         ? (JSON.parse(storedPriorityKeys) as string[])
         : [];
 
-      storeSeenPriorityMessageKeys(
-        new Set([
-          ...parsedPriorityKeys,
-          ...getAvailablePriorityMessageAlertKeys(),
-        ]),
-      );
+      storeSeenPriorityMessageKeys(new Set(parsedPriorityKeys));
     } catch {
-      storeSeenPriorityMessageKeys(getAvailablePriorityMessageAlertKeys());
+      storeSeenPriorityMessageKeys(new Set());
     }
 
     priorityMessageAlertBaselineUserIdRef.current = currentAnnouncementUser.id;
   }, [
     currentAnnouncementUser.id,
-    getAvailablePriorityMessageAlertKeys,
     isAuthenticated,
     storeSeenPriorityMessageKeys,
   ]);
@@ -3255,14 +3166,6 @@ export function UniparWorkspace({
 
     if (!priorityAlert) return;
 
-    const priorityAlertKey = getPriorityMessageAlertKey(
-      priorityAlert.scope,
-      priorityAlert.conversation.id,
-      priorityAlert.message,
-    );
-
-    addSeenPriorityMessageKeys([priorityAlertKey]);
-
     const timeoutId = window.setTimeout(() => {
       setActivePriorityMessageAlert(priorityAlert);
       setPriorityMessageCountdown(PRIORITY_MESSAGE_UNLOCK_SECONDS);
@@ -3274,7 +3177,6 @@ export function UniparWorkspace({
     activeLoanReminder,
     activePriorityMessageAlert,
     activeReminderEvent,
-    addSeenPriorityMessageKeys,
     currentAnnouncementUser.id,
     findPriorityMessageAlert,
     isAuthenticated,
@@ -4467,7 +4369,7 @@ export function UniparWorkspace({
   ]);
 
   const handleDismissPriorityMessageAlert = () => {
-    addSeenPriorityMessageKeys(getAvailablePriorityMessageAlertKeys());
+    markPriorityMessageAlertSeen(activePriorityMessageAlert);
     setActivePriorityMessageAlert(null);
     setPriorityMessageCountdown(0);
   };
@@ -4475,7 +4377,7 @@ export function UniparWorkspace({
   const handleOpenPriorityMessageAlert = () => {
     if (!activePriorityMessageAlert) return;
 
-    addSeenPriorityMessageKeys(getAvailablePriorityMessageAlertKeys());
+    markPriorityMessageAlertSeen(activePriorityMessageAlert);
 
     if (activePriorityMessageAlert.scope === "group") {
       navigateTo("grupos");
