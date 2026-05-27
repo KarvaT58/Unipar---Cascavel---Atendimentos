@@ -79,6 +79,7 @@ export interface AppState {
   extensionItems: ExtensionContentItem[];
   typingIndicators: Record<string, TypingIndicatorState>;
   pageRecords: Record<string, AppPageRecord[]>;
+  priorityMessageAlertSeenKeysByUserId: Record<string, string[]>;
 }
 
 export interface AppStateEnvelope {
@@ -110,6 +111,7 @@ export const EMPTY_APP_STATE: AppState = {
   extensionItems: [],
   typingIndicators: {},
   pageRecords: {},
+  priorityMessageAlertSeenKeysByUserId: {},
 };
 
 const DATE_FIELD_NAMES = new Set([
@@ -190,6 +192,20 @@ function mergeOptionalStringLists(first?: string[], second?: string[]) {
   if (!first && !second) return undefined;
 
   return mergeStringLists(first, second);
+}
+
+function mergeStringListRecords(
+  first: Record<string, string[]> = {},
+  second: Record<string, string[]> = {},
+) {
+  const keys = new Set([...Object.keys(first), ...Object.keys(second)]);
+
+  return Object.fromEntries(
+    Array.from(keys).map((key) => [
+      key,
+      mergeStringLists(first[key], second[key]).slice(-500),
+    ]),
+  );
 }
 
 function getDateLikeTime(value: unknown) {
@@ -1038,6 +1054,10 @@ export function mergeAppStates(
     pageRecords: mergeAppPageRecordCollections(
       storedState.pageRecords,
       incomingState.pageRecords,
+    ),
+    priorityMessageAlertSeenKeysByUserId: mergeStringListRecords(
+      storedState.priorityMessageAlertSeenKeysByUserId,
+      incomingState.priorityMessageAlertSeenKeysByUserId,
     ),
   };
 }

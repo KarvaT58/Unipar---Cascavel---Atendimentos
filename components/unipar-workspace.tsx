@@ -1264,6 +1264,12 @@ export function UniparWorkspace({
     Record<string, Message[]>
   >(EMPTY_APP_STATE.messagesByContact);
   const messagesByContactRef = useRef(messagesByContact);
+  const [
+    priorityMessageAlertSeenKeysByUserId,
+    setPriorityMessageAlertSeenKeysByUserId,
+  ] = useState<Record<string, string[]>>(
+    EMPTY_APP_STATE.priorityMessageAlertSeenKeysByUserId,
+  );
   const [groupMessagesByContact, setGroupMessagesByContact] = useState<
     Record<string, Message[]>
   >({});
@@ -1428,6 +1434,7 @@ export function UniparWorkspace({
   const [typingIndicators, setTypingIndicators] = useState<
     Record<string, TypingIndicatorState>
   >(EMPTY_APP_STATE.typingIndicators);
+  const [isBackendReady, setIsBackendReady] = useState(false);
   const typingIndicatorsRef = useRef<Record<string, TypingIndicatorState>>(
     EMPTY_APP_STATE.typingIndicators,
   );
@@ -1456,10 +1463,19 @@ export function UniparWorkspace({
 
       if (!currentAnnouncementUser.id) return;
 
+      const nextPriorityMessageKeys = Array.from(priorityMessageKeys).slice(
+        -300,
+      );
+
+      setPriorityMessageAlertSeenKeysByUserId((currentKeysByUserId) => ({
+        ...currentKeysByUserId,
+        [currentAnnouncementUser.id]: nextPriorityMessageKeys,
+      }));
+
       try {
         window.localStorage.setItem(
           getPriorityMessageAlertStorageKey(currentAnnouncementUser.id),
-          JSON.stringify(Array.from(priorityMessageKeys).slice(-300)),
+          JSON.stringify(nextPriorityMessageKeys),
         );
       } catch {
         // localStorage pode estar indisponível em alguns navegadores.
@@ -1613,6 +1629,7 @@ export function UniparWorkspace({
       extensionItems,
       typingIndicators: EMPTY_APP_STATE.typingIndicators,
       pageRecords: EMPTY_APP_STATE.pageRecords,
+      priorityMessageAlertSeenKeysByUserId,
     }),
     [
       accessRequests,
@@ -1631,6 +1648,7 @@ export function UniparWorkspace({
       kanbanBoardsByUserId,
       loanRequests,
       messagesByContact,
+      priorityMessageAlertSeenKeysByUserId,
       serviceTickets,
     ],
   );
@@ -1700,6 +1718,9 @@ export function UniparWorkspace({
     setAnnouncementEvents(nextState.announcementEvents);
     setDeletedAnnouncementEventIds(nextState.deletedAnnouncementEventIds);
     setKanbanBoardsByUserId(nextState.kanbanBoardsByUserId);
+    setPriorityMessageAlertSeenKeysByUserId(
+      nextState.priorityMessageAlertSeenKeysByUserId,
+    );
     setHelpItems(nextState.helpItems);
     setExtensionItems(nextState.extensionItems);
     setSelectedContact((currentContact) =>
@@ -1830,6 +1851,7 @@ export function UniparWorkspace({
       .finally(() => {
         if (!cancelled) {
           backendReadyRef.current = true;
+          setIsBackendReady(true);
         }
       });
 
@@ -2582,7 +2604,7 @@ export function UniparWorkspace({
       return;
     }
 
-    if (!backendReadyRef.current) return;
+    if (!isBackendReady) return;
 
     const { allKeys, audibleKeys } = notificationMessageSnapshot;
 
@@ -2648,6 +2670,7 @@ export function UniparWorkspace({
     playMessageNotificationSound();
   }, [
     currentAnnouncementUser.id,
+    isBackendReady,
     isAuthenticated,
     notificationMessageSnapshot,
     playMessageNotificationSound,
@@ -3121,32 +3144,18 @@ export function UniparWorkspace({
       return;
     }
 
-    if (!backendReadyRef.current) return;
-    if (
-      priorityMessageAlertBaselineUserIdRef.current ===
-      currentAnnouncementUser.id
-    ) {
-      return;
-    }
+    if (!isBackendReady) return;
+    const storedPriorityKeys =
+      priorityMessageAlertSeenKeysByUserId[currentAnnouncementUser.id] ?? [];
 
-    try {
-      const storedPriorityKeys = window.localStorage.getItem(
-        getPriorityMessageAlertStorageKey(currentAnnouncementUser.id),
-      );
-      const parsedPriorityKeys = storedPriorityKeys
-        ? (JSON.parse(storedPriorityKeys) as string[])
-        : [];
-
-      storeSeenPriorityMessageKeys(new Set(parsedPriorityKeys));
-    } catch {
-      storeSeenPriorityMessageKeys(new Set());
-    }
+    seenPriorityMessageKeysRef.current = new Set(storedPriorityKeys);
 
     priorityMessageAlertBaselineUserIdRef.current = currentAnnouncementUser.id;
   }, [
     currentAnnouncementUser.id,
+    isBackendReady,
     isAuthenticated,
-    storeSeenPriorityMessageKeys,
+    priorityMessageAlertSeenKeysByUserId,
   ]);
   useEffect(() => {
     if (
