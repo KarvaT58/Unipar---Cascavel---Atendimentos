@@ -1448,6 +1448,7 @@ export function UniparWorkspace({
   const notificationBaselineUserIdRef = useRef("");
   const messageNotificationAudioRef = useRef<HTMLAudioElement | null>(null);
   const pendingMessageNotificationSoundRef = useRef(false);
+  const messageNotificationAudioUnlockedRef = useRef(false);
 
   const storeSeenPriorityMessageKeys = useCallback(
     (priorityMessageKeys: Set<string>) => {
@@ -1505,6 +1506,28 @@ export function UniparWorkspace({
     });
   }, []);
 
+  const unlockMessageNotificationSound = useCallback(() => {
+    const audio = messageNotificationAudioRef.current;
+
+    if (!audio || messageNotificationAudioUnlockedRef.current) return;
+
+    const previousMuted = audio.muted;
+    audio.muted = true;
+    audio.currentTime = 0;
+
+    void audio
+      .play()
+      .then(() => {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.muted = previousMuted;
+        messageNotificationAudioUnlockedRef.current = true;
+      })
+      .catch(() => {
+        audio.muted = previousMuted;
+      });
+  }, []);
+
   const flushPendingMessageNotificationSound = useCallback(() => {
     if (!pendingMessageNotificationSoundRef.current) return;
 
@@ -1512,18 +1535,27 @@ export function UniparWorkspace({
     playMessageNotificationSound();
   }, [playMessageNotificationSound]);
 
+  const handleMessageNotificationAudioGesture = useCallback(() => {
+    if (pendingMessageNotificationSoundRef.current) {
+      flushPendingMessageNotificationSound();
+      return;
+    }
+
+    unlockMessageNotificationSound();
+  }, [flushPendingMessageNotificationSound, unlockMessageNotificationSound]);
+
   useEffect(() => {
-    window.addEventListener("pointerdown", flushPendingMessageNotificationSound);
-    window.addEventListener("keydown", flushPendingMessageNotificationSound);
+    window.addEventListener("pointerdown", handleMessageNotificationAudioGesture);
+    window.addEventListener("keydown", handleMessageNotificationAudioGesture);
 
     return () => {
       window.removeEventListener(
         "pointerdown",
-        flushPendingMessageNotificationSound,
+        handleMessageNotificationAudioGesture,
       );
-      window.removeEventListener("keydown", flushPendingMessageNotificationSound);
+      window.removeEventListener("keydown", handleMessageNotificationAudioGesture);
     };
-  }, [flushPendingMessageNotificationSound]);
+  }, [handleMessageNotificationAudioGesture]);
 
   const navigateTo = useCallback(
     (item: string, mode: "push" | "replace" = "push") => {

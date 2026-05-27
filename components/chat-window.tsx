@@ -1093,6 +1093,8 @@ export function ChatWindow({
   const messageLongPressTriggeredRef = useRef(false);
   const pendingScrollRestoreRef = useRef<number | null>(null);
   const shouldScrollToBottomRef = useRef(true);
+  const isAtLatestMessageRef = useRef(true);
+  const latestVisibleMessageKeyRef = useRef<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingAudioChunksRef = useRef<Blob[]>([]);
   const isAttachmentComposerOpen = pendingAttachments.length > 0;
@@ -1184,9 +1186,31 @@ export function ChatWindow({
     return contact.avatar;
   };
 
+  const scrollToBottom = (behavior: ScrollBehavior = "auto") => {
+    const scrollElement = scrollRef.current;
+    if (!scrollElement) return;
+
+    scrollElement.scrollTo({
+      top: scrollElement.scrollHeight,
+      behavior,
+    });
+    isAtLatestMessageRef.current = true;
+    setShowScrollToLatest(false);
+  };
+
+  const requestScrollToBottom = (behavior: ScrollBehavior = "auto") => {
+    requestAnimationFrame(() => {
+      scrollToBottom(behavior);
+      requestAnimationFrame(() => scrollToBottom(behavior));
+      window.setTimeout(() => scrollToBottom("auto"), 120);
+    });
+  };
+
   useEffect(() => {
     pendingScrollRestoreRef.current = null;
     shouldScrollToBottomRef.current = true;
+    isAtLatestMessageRef.current = true;
+    latestVisibleMessageKeyRef.current = null;
     requestAnimationFrame(() => {
       messageInputRef.current?.focus({ preventScroll: true });
     });
@@ -1280,6 +1304,31 @@ export function ChatWindow({
   }, [inputValue]);
 
   useEffect(() => {
+    const latestMessage = messagesVisibleToCurrentUser.at(-1);
+    const latestMessageKey = latestMessage
+      ? `${contact.id}:${latestMessage.id}`
+      : `${contact.id}:empty`;
+    const previousLatestMessageKey = latestVisibleMessageKeyRef.current;
+
+    latestVisibleMessageKeyRef.current = latestMessageKey;
+
+    if (
+      !latestMessage ||
+      previousLatestMessageKey === null ||
+      previousLatestMessageKey === latestMessageKey
+    ) {
+      return;
+    }
+
+    if (isMessageOwn(latestMessage) || isAtLatestMessageRef.current) {
+      shouldScrollToBottomRef.current = true;
+      return;
+    }
+
+    setShowScrollToLatest(true);
+  }, [contact.id, messagesVisibleToCurrentUser]);
+
+  useEffect(() => {
     const scrollElement = scrollRef.current;
     if (!scrollElement) return;
 
@@ -1299,13 +1348,7 @@ export function ChatWindow({
 
     if (shouldScrollToBottomRef.current) {
       shouldScrollToBottomRef.current = false;
-      requestAnimationFrame(() => {
-        const currentScrollElement = scrollRef.current;
-        if (!currentScrollElement) return;
-
-        currentScrollElement.scrollTop = currentScrollElement.scrollHeight;
-        setShowScrollToLatest(false);
-      });
+      requestScrollToBottom();
     }
   }, [messages, visibleMessageCount]);
 
@@ -1511,7 +1554,9 @@ export function ChatWindow({
       scrollElement.scrollHeight -
       scrollElement.scrollTop -
       scrollElement.clientHeight;
+    const isAtLatestMessage = distanceFromBottom <= 96;
 
+    isAtLatestMessageRef.current = isAtLatestMessage;
     setShowScrollToLatest(distanceFromBottom > 180);
 
     if (visibleMessageCount >= messagesVisibleToCurrentUser.length) return;
@@ -1531,14 +1576,7 @@ export function ChatWindow({
   };
 
   const handleScrollToLatestMessage = () => {
-    const scrollElement = scrollRef.current;
-    if (!scrollElement) return;
-
-    scrollElement.scrollTo({
-      top: scrollElement.scrollHeight,
-      behavior: "smooth",
-    });
-    setShowScrollToLatest(false);
+    scrollToBottom("smooth");
   };
 
   const openAttachmentPicker = () => {

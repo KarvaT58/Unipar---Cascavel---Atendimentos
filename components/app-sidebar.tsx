@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { usePathname } from "next/navigation"
 
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
@@ -53,6 +54,63 @@ import {
 const SERVICE_TICKET_NOTIFICATION_SOUND_SRC = "/audio/notificacao.mp3"
 const SERVICE_TICKET_NOTIFICATION_FALLBACK_REFRESH_MS = 60000
 const DIRECT_CONVERSATION_PREFIX = "dm:"
+const CHAT_NOTIFICATION_SOUND_STORAGE_LIMIT = 500
+const workspaceNotificationPaths = new Set([
+  "/ajuda",
+  "/anuncios-eventos",
+  "/atendimentos",
+  "/chat-interno",
+  "/emprestimos",
+  "/grupos",
+  "/kanban",
+  "/ramais",
+])
+
+function normalizePathname(pathname: string | null) {
+  if (!pathname) return "/"
+
+  const normalizedPathname = pathname.replace(/\/+$/, "")
+
+  return normalizedPathname || "/"
+}
+
+function getSidebarChatNotificationSoundStorageKey(userId: string) {
+  return `sidebar-chat-notification-sound-seen:${userId}`
+}
+
+function readSidebarChatNotificationSoundKeys(userId: string) {
+  try {
+    const storedValue = window.localStorage.getItem(
+      getSidebarChatNotificationSoundStorageKey(userId)
+    )
+
+    if (!storedValue) return new Set<string>()
+
+    const parsedValue = JSON.parse(storedValue)
+
+    if (!Array.isArray(parsedValue)) return new Set<string>()
+
+    return new Set(
+      parsedValue.filter((key): key is string => typeof key === "string")
+    )
+  } catch {
+    return new Set<string>()
+  }
+}
+
+function writeSidebarChatNotificationSoundKeys(
+  userId: string,
+  keys: Iterable<string>
+) {
+  try {
+    window.localStorage.setItem(
+      getSidebarChatNotificationSoundStorageKey(userId),
+      JSON.stringify(Array.from(keys).slice(-CHAT_NOTIFICATION_SOUND_STORAGE_LIMIT))
+    )
+  } catch {
+    // O som continua funcionando mesmo se o navegador bloquear storage.
+  }
+}
 
 function getRealtimePayloadKey(event: Event) {
   try {
@@ -176,14 +234,22 @@ export function AppSidebar({
   const latestAppStateRef = React.useRef<AppState | null>(null)
   const serviceTicketNotificationBaselineUserIdRef = React.useRef("")
   const loanNotificationBaselineUserIdRef = React.useRef("")
+  const chatNotificationSoundBaselineUserIdRef = React.useRef("")
   const serviceTicketNotificationCountRef = React.useRef(0)
   const loanNotificationCountRef = React.useRef(0)
   const chatNotificationCountsRef = React.useRef({ chat: 0, groups: 0 })
   const serviceTicketUnreadKeysRef = React.useRef<Set<string>>(new Set())
   const loanUnreadKeysRef = React.useRef<Set<string>>(new Set())
+  const chatNotificationSoundKeysRef = React.useRef<Set<string>>(new Set())
   const serviceTicketNotificationRefreshIdRef = React.useRef(0)
   const notificationAudioRef = React.useRef<HTMLAudioElement | null>(null)
   const pendingNotificationSoundRef = React.useRef(false)
+  const notificationAudioUnlockedRef = React.useRef(false)
+  const pathname = usePathname()
+  const isWorkspaceNotificationPath = React.useMemo(
+    () => workspaceNotificationPaths.has(normalizePathname(pathname)),
+    [pathname]
+  )
   const currentNotificationUser = React.useMemo(
     () =>
       user.id
@@ -296,6 +362,29 @@ export function AppSidebar({
     })
   }, [])
 
+  const unlockNotificationSound = React.useCallback(() => {
+    const audio = notificationAudioRef.current
+
+    if (!audio || notificationAudioUnlockedRef.current) return
+
+    const previousMuted = audio.muted
+
+    audio.muted = true
+    audio.currentTime = 0
+
+    void audio
+      .play()
+      .then(() => {
+        audio.pause()
+        audio.currentTime = 0
+        audio.muted = previousMuted
+        notificationAudioUnlockedRef.current = true
+      })
+      .catch(() => {
+        audio.muted = previousMuted
+      })
+  }, [])
+
   const flushPendingNotificationSound = React.useCallback(() => {
     if (!pendingNotificationSoundRef.current) {
       return
@@ -305,15 +394,24 @@ export function AppSidebar({
     playServiceTicketNotificationSound()
   }, [playServiceTicketNotificationSound])
 
+  const handleNotificationAudioGesture = React.useCallback(() => {
+    if (pendingNotificationSoundRef.current) {
+      flushPendingNotificationSound()
+      return
+    }
+
+    unlockNotificationSound()
+  }, [flushPendingNotificationSound, unlockNotificationSound])
+
   React.useEffect(() => {
-    window.addEventListener("pointerdown", flushPendingNotificationSound)
-    window.addEventListener("keydown", flushPendingNotificationSound)
+    window.addEventListener("pointerdown", handleNotificationAudioGesture)
+    window.addEventListener("keydown", handleNotificationAudioGesture)
 
     return () => {
-      window.removeEventListener("pointerdown", flushPendingNotificationSound)
-      window.removeEventListener("keydown", flushPendingNotificationSound)
+      window.removeEventListener("pointerdown", handleNotificationAudioGesture)
+      window.removeEventListener("keydown", handleNotificationAudioGesture)
     }
-  }, [flushPendingNotificationSound])
+  }, [handleNotificationAudioGesture])
 
   const refreshServiceTicketNotifications = React.useCallback(
     async (options?: { playSound?: boolean; fetchState?: boolean }) => {
@@ -326,6 +424,8 @@ export function AppSidebar({
         if (!currentNotificationUser) {
           serviceTicketNotificationBaselineUserIdRef.current = ""
           loanNotificationBaselineUserIdRef.current = ""
+          chatNotificationSoundBaselineUserIdRef.current = ""
+          chatNotificationSoundKeysRef.current = new Set()
           clearServiceTicketNotificationCount()
           clearLoanNotificationCount()
           clearChatNotificationCounts()
@@ -351,9 +451,11 @@ export function AppSidebar({
         setSidebarUserProfile(
           getSidebarUserProfile(state, user)
         )
-        commitChatNotificationCounts(
-          getSidebarChatNotificationCounts(state, currentNotificationUser.id)
+        const chatNotificationSnapshot = getSidebarChatNotificationSnapshot(
+          state,
+          currentNotificationUser.id
         )
+        commitChatNotificationCounts(chatNotificationSnapshot.counts)
 
         const readKeys = readServiceTicketNotificationReadKeys(
           currentNotificationUser.id
@@ -376,6 +478,9 @@ export function AppSidebar({
           currentNotificationUser.id
         const isNewLoanNotificationUser =
           loanNotificationBaselineUserIdRef.current !== currentNotificationUser.id
+        const isNewChatNotificationUser =
+          chatNotificationSoundBaselineUserIdRef.current !==
+          currentNotificationUser.id
 
         if (isNewNotificationUser) {
           serviceTicketNotificationBaselineUserIdRef.current =
@@ -399,6 +504,19 @@ export function AppSidebar({
           )
         }
 
+        if (isNewChatNotificationUser) {
+          chatNotificationSoundBaselineUserIdRef.current =
+            currentNotificationUser.id
+          chatNotificationSoundKeysRef.current = new Set([
+            ...readSidebarChatNotificationSoundKeys(currentNotificationUser.id),
+            ...chatNotificationSnapshot.allKeys,
+          ])
+          writeSidebarChatNotificationSoundKeys(
+            currentNotificationUser.id,
+            chatNotificationSoundKeysRef.current
+          )
+        }
+
         if (isNewLoanNotificationUser) {
           loanNotificationBaselineUserIdRef.current = currentNotificationUser.id
           loanUnreadKeysRef.current = new Set(loanSnapshot.unreadKeys)
@@ -416,7 +534,11 @@ export function AppSidebar({
           )
         }
 
-        if (isNewNotificationUser || isNewLoanNotificationUser) {
+        if (
+          isNewNotificationUser ||
+          isNewLoanNotificationUser ||
+          isNewChatNotificationUser
+        ) {
           return
         }
 
@@ -461,9 +583,24 @@ export function AppSidebar({
           new Set([...loanSoundKeys, ...loanSnapshot.allKeys])
         )
 
+        const knownChatSoundKeys = chatNotificationSoundKeysRef.current
+        const newChatAudibleKeys = Array.from(
+          chatNotificationSnapshot.audibleKeys
+        ).filter((key) => !knownChatSoundKeys.has(key))
+
+        chatNotificationSoundKeysRef.current = new Set([
+          ...knownChatSoundKeys,
+          ...chatNotificationSnapshot.allKeys,
+        ])
+        writeSidebarChatNotificationSoundKeys(
+          currentNotificationUser.id,
+          chatNotificationSoundKeysRef.current
+        )
+
         if (
-          shouldPlaySound &&
-          (newUnreadKeys.length > 0 || newLoanUnreadKeys.length > 0)
+          (shouldPlaySound &&
+            (newUnreadKeys.length > 0 || newLoanUnreadKeys.length > 0)) ||
+          (!isWorkspaceNotificationPath && newChatAudibleKeys.length > 0)
         ) {
           playServiceTicketNotificationSound()
         }
@@ -479,6 +616,7 @@ export function AppSidebar({
       commitLoanNotificationCount,
       commitServiceTicketNotificationCount,
       currentNotificationUser,
+      isWorkspaceNotificationPath,
       playServiceTicketNotificationSound,
       user,
     ]
@@ -660,12 +798,19 @@ function parseAccessRequestStreamPayload(value: string) {
   }
 }
 
-function getSidebarChatNotificationCounts(state: AppState, userId: string) {
-  if (!userId) return { chat: 0, groups: 0 }
+function getSidebarChatNotificationSnapshot(state: AppState, userId: string) {
+  const emptySnapshot = {
+    counts: { chat: 0, groups: 0 },
+    allKeys: new Set<string>(),
+    audibleKeys: new Set<string>(),
+  }
+
+  if (!userId) return emptySnapshot
 
   const directMessageIds = new Set<string>()
-  let chat = 0
-  let groups = 0
+  const counts = { chat: 0, groups: 0 }
+  const allKeys = new Set<string>()
+  const audibleKeys = new Set<string>()
 
   Object.entries(state.messagesByContact).forEach(
     ([conversationId, messages]) => {
@@ -681,8 +826,27 @@ function getSidebarChatNotificationCounts(state: AppState, userId: string) {
         if (!shouldCountIncomingDirectMessage(message, userId)) return
         if (directMessageIds.has(message.id)) return
 
+        const contactId = getSidebarDirectNotificationContactId(
+          conversationId,
+          message,
+          userId
+        )
+        const notificationKey = getSidebarChatNotificationKey(
+          "chat",
+          contactId ?? conversationId,
+          message
+        )
+
         directMessageIds.add(message.id)
-        chat += 1
+        counts.chat += 1
+        allKeys.add(notificationKey)
+
+        if (
+          contactId &&
+          !isSidebarConversationMuted(state, userId, contactId)
+        ) {
+          audibleKeys.add(notificationKey)
+        }
       })
     }
   )
@@ -692,12 +856,69 @@ function getSidebarChatNotificationCounts(state: AppState, userId: string) {
 
     messages.forEach((message) => {
       if (shouldCountIncomingGroupMessage(message, userId)) {
-        groups += 1
+        const notificationKey = getSidebarChatNotificationKey(
+          "group",
+          groupId,
+          message
+        )
+
+        counts.groups += 1
+        allKeys.add(notificationKey)
+
+        if (!isSidebarConversationMuted(state, userId, groupId)) {
+          audibleKeys.add(notificationKey)
+        }
       }
     })
   })
 
-  return { chat, groups }
+  return { counts, allKeys, audibleKeys }
+}
+
+function getSidebarChatNotificationKey(
+  scope: "chat" | "group",
+  conversationId: string,
+  message: Message
+) {
+  return `${scope}:${conversationId}:${message.id}:${message.senderId ?? "unknown"}`
+}
+
+function getSidebarDirectNotificationContactId(
+  conversationId: string,
+  message: Message,
+  userId: string
+) {
+  if (message.senderId && message.senderId !== userId) return message.senderId
+
+  const directParticipants = parseDirectConversationKey(conversationId)
+
+  if (directParticipants) {
+    const [firstUserId, secondUserId] = directParticipants
+
+    if (firstUserId === userId) return secondUserId
+    if (secondUserId === userId) return firstUserId
+  }
+
+  if (conversationId !== userId) return conversationId
+
+  return null
+}
+
+function isSidebarConversationMuted(
+  state: AppState,
+  userId: string,
+  conversationId: string
+) {
+  const conversation = [
+    ...state.contacts,
+    ...state.archivedContacts,
+    ...state.groups,
+    ...state.archivedGroups,
+  ].find((contact) => contact.id === conversationId)
+  const userPreference =
+    conversation?.conversationPreferencesByUserId?.[userId]
+
+  return userPreference?.isMuted ?? conversation?.isMuted ?? false
 }
 
 function getSidebarUserProfile(
