@@ -43,6 +43,7 @@ import {
   ChevronDown,
   ImageIcon,
   UserPlus,
+  LogOut,
 } from "lucide-react";
 import {
   formatLastMessageTime,
@@ -105,6 +106,7 @@ interface ConversationListProps {
   onPinContact: (contactId: string) => void;
   onReportContact: (contactId: string) => void;
   onClearContact: (contactId: string) => void;
+  onLeaveGroup?: (contactId: string) => void;
   onDeleteContact: (contactId: string) => void;
   showArchived: boolean;
   onToggleArchived: () => void;
@@ -126,6 +128,7 @@ export function ConversationList({
   onPinContact,
   onReportContact,
   onClearContact,
+  onLeaveGroup,
   onDeleteContact,
   showArchived,
   onToggleArchived,
@@ -971,6 +974,15 @@ export function ConversationList({
                           <Eraser className="mr-2 h-4 w-4 shrink-0" />
                           Limpar {conversationLabel}
                         </DropdownMenuItem>
+                        {isGroupMode && onLeaveGroup && (
+                          <DropdownMenuItem
+                            className="whitespace-nowrap text-destructive focus:text-destructive"
+                            onClick={() => onLeaveGroup(contact.id)}
+                          >
+                            <LogOut className="mr-2 h-4 w-4 shrink-0" />
+                            Sair do grupo
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem
                           className="whitespace-nowrap text-destructive focus:text-destructive"
                           onClick={() => onDeleteContact(contact.id)}

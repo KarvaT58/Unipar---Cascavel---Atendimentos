@@ -6283,6 +6283,7 @@ export function UniparWorkspace({
                 onPinContact={handlePinGroup}
                 onReportContact={handleReportGroupConversation}
                 onClearContact={handleClearGroupConversation}
+                onLeaveGroup={handleLeaveGroup}
                 onDeleteContact={handleDeleteGroup}
                 showArchived={showArchivedGroups}
                 onToggleArchived={() =>
