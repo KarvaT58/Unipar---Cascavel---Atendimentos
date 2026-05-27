@@ -54,6 +54,8 @@ import {
 const SERVICE_TICKET_NOTIFICATION_SOUND_SRC = "/audio/notificacao.mp3"
 const SERVICE_TICKET_NOTIFICATION_FALLBACK_REFRESH_MS = 60000
 const DIRECT_CONVERSATION_PREFIX = "dm:"
+const APPLICATION_TITLE = "Unipar - Cascavel Atendimentos"
+const BROWSER_NOTIFICATION_ICON = "/logo.png"
 const CHAT_NOTIFICATION_SOUND_STORAGE_LIMIT = 500
 const workspaceNotificationPaths = new Set([
   "/ajuda",
@@ -110,6 +112,14 @@ function writeSidebarChatNotificationSoundKeys(
   } catch {
     // O som continua funcionando mesmo se o navegador bloquear storage.
   }
+}
+
+function canUseNativeBrowserNotifications() {
+  return (
+    typeof window !== "undefined" &&
+    window.isSecureContext &&
+    "Notification" in window
+  )
 }
 
 function getRealtimePayloadKey(event: Event) {
@@ -245,6 +255,7 @@ export function AppSidebar({
   const notificationAudioRef = React.useRef<HTMLAudioElement | null>(null)
   const pendingNotificationSoundRef = React.useRef(false)
   const notificationAudioUnlockedRef = React.useRef(false)
+  const nativeNotificationPermissionRequestedRef = React.useRef(false)
   const pathname = usePathname()
   const isWorkspaceNotificationPath = React.useMemo(
     () => workspaceNotificationPaths.has(normalizePathname(pathname)),
@@ -348,6 +359,69 @@ export function AppSidebar({
     commitChatNotificationCounts({ chat: 0, groups: 0 })
   }, [commitChatNotificationCounts])
 
+  React.useEffect(() => {
+    const totalNotificationCount =
+      serviceTicketNotificationCount +
+      loanNotificationCount +
+      chatNotificationCount +
+      groupNotificationCount +
+      (user.isAdmin ? pendingAccessRequests : 0)
+
+    document.title =
+      totalNotificationCount > 0
+        ? `(${totalNotificationCount}) ${APPLICATION_TITLE}`
+        : APPLICATION_TITLE
+
+    return () => {
+      document.title = APPLICATION_TITLE
+    }
+  }, [
+    chatNotificationCount,
+    groupNotificationCount,
+    loanNotificationCount,
+    pendingAccessRequests,
+    serviceTicketNotificationCount,
+    user.isAdmin,
+  ])
+
+  const requestNativeNotificationPermission = React.useCallback(() => {
+    if (
+      nativeNotificationPermissionRequestedRef.current ||
+      !canUseNativeBrowserNotifications() ||
+      Notification.permission !== "default"
+    ) {
+      return
+    }
+
+    nativeNotificationPermissionRequestedRef.current = true
+    void Notification.requestPermission()
+  }, [])
+
+  const showNativeBrowserNotification = React.useCallback(
+    (title: string, body: string) => {
+      if (
+        !canUseNativeBrowserNotifications() ||
+        Notification.permission !== "granted" ||
+        (document.visibilityState === "visible" && document.hasFocus())
+      ) {
+        return
+      }
+
+      const notification = new Notification(title, {
+        body,
+        icon: BROWSER_NOTIFICATION_ICON,
+        badge: BROWSER_NOTIFICATION_ICON,
+        tag: "unipar-atendimentos-notificacoes",
+      })
+
+      notification.onclick = () => {
+        window.focus()
+        notification.close()
+      }
+    },
+    []
+  )
+
   const playServiceTicketNotificationSound = React.useCallback(() => {
     const audio = notificationAudioRef.current
 
@@ -395,13 +469,19 @@ export function AppSidebar({
   }, [playServiceTicketNotificationSound])
 
   const handleNotificationAudioGesture = React.useCallback(() => {
+    requestNativeNotificationPermission()
+
     if (pendingNotificationSoundRef.current) {
       flushPendingNotificationSound()
       return
     }
 
     unlockNotificationSound()
-  }, [flushPendingNotificationSound, unlockNotificationSound])
+  }, [
+    flushPendingNotificationSound,
+    requestNativeNotificationPermission,
+    unlockNotificationSound,
+  ])
 
   React.useEffect(() => {
     window.addEventListener("pointerdown", handleNotificationAudioGesture)
@@ -587,6 +667,12 @@ export function AppSidebar({
         const newChatAudibleKeys = Array.from(
           chatNotificationSnapshot.audibleKeys
         ).filter((key) => !knownChatSoundKeys.has(key))
+        const newDirectMessageKeys = newChatAudibleKeys.filter((key) =>
+          key.startsWith("chat:")
+        )
+        const newGroupMessageKeys = newChatAudibleKeys.filter((key) =>
+          key.startsWith("group:")
+        )
 
         chatNotificationSoundKeysRef.current = new Set([
           ...knownChatSoundKeys,
@@ -597,9 +683,25 @@ export function AppSidebar({
           chatNotificationSoundKeysRef.current
         )
 
+        const shouldNotifyServiceOrLoan =
+          shouldPlaySound &&
+          (newUnreadKeys.length > 0 || newLoanUnreadKeys.length > 0)
+        const browserNotificationBody = getSidebarBrowserNotificationBody({
+          serviceTickets: shouldNotifyServiceOrLoan ? newUnreadKeys.length : 0,
+          loans: shouldNotifyServiceOrLoan ? newLoanUnreadKeys.length : 0,
+          directMessages: newDirectMessageKeys.length,
+          groupMessages: newGroupMessageKeys.length,
+        })
+
+        if (browserNotificationBody) {
+          showNativeBrowserNotification(
+            "Nova notificação no sistema",
+            browserNotificationBody
+          )
+        }
+
         if (
-          (shouldPlaySound &&
-            (newUnreadKeys.length > 0 || newLoanUnreadKeys.length > 0)) ||
+          shouldNotifyServiceOrLoan ||
           (!isWorkspaceNotificationPath && newChatAudibleKeys.length > 0)
         ) {
           playServiceTicketNotificationSound()
@@ -618,6 +720,7 @@ export function AppSidebar({
       currentNotificationUser,
       isWorkspaceNotificationPath,
       playServiceTicketNotificationSound,
+      showNativeBrowserNotification,
       user,
     ]
   )
@@ -796,6 +899,54 @@ function parseAccessRequestStreamPayload(value: string) {
   } catch {
     return null
   }
+}
+
+function getSidebarBrowserNotificationBody({
+  serviceTickets,
+  loans,
+  directMessages,
+  groupMessages,
+}: {
+  serviceTickets: number
+  loans: number
+  directMessages: number
+  groupMessages: number
+}) {
+  const items: string[] = []
+
+  if (serviceTickets > 0) {
+    items.push(
+      `${serviceTickets} ${
+        serviceTickets === 1 ? "nova notificação" : "novas notificações"
+      } em Atendimentos`
+    )
+  }
+
+  if (loans > 0) {
+    items.push(
+      `${loans} ${
+        loans === 1 ? "nova notificação" : "novas notificações"
+      } em Empréstimos`
+    )
+  }
+
+  if (directMessages > 0) {
+    items.push(
+      `${directMessages} ${
+        directMessages === 1 ? "nova mensagem" : "novas mensagens"
+      } no Chat Interno`
+    )
+  }
+
+  if (groupMessages > 0) {
+    items.push(
+      `${groupMessages} ${
+        groupMessages === 1 ? "nova mensagem" : "novas mensagens"
+      } em Grupos`
+    )
+  }
+
+  return items.join(" • ")
 }
 
 function getSidebarChatNotificationSnapshot(state: AppState, userId: string) {
