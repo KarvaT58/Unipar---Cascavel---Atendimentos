@@ -56,6 +56,7 @@ type AuthUserRow = {
   updatedAt: Date | string
   presence?: {
     chatStatus: string
+    preferredChatStatus?: string | null
     workStatus: string
     lastSeenAt: Date | string | null
   } | null
@@ -448,6 +449,7 @@ async function readAuthUsers(): Promise<AuthUserRow[]> {
         presence: {
           select: {
             chatStatus: true,
+            preferredChatStatus: true,
             workStatus: true,
             lastSeenAt: true,
           },

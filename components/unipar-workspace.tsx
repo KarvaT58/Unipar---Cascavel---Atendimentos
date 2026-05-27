@@ -1783,12 +1783,17 @@ export function UniparWorkspace({
         (event as MessageEvent).data,
       ) as RealtimeEventPayload;
 
-      if (payload.clientId === backendClientIdRef.current) return;
-
       if (payload.payload?.key === "typing") {
         applyTypingRealtimeEvent(payload.payload);
         return;
       }
+
+      if (payload.payload?.key === "presence") {
+        refreshBackendStateRef.current();
+        return;
+      }
+
+      if (payload.clientId === backendClientIdRef.current) return;
 
       refreshBackendStateRef.current();
     });

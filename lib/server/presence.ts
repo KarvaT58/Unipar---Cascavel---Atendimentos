@@ -21,6 +21,7 @@ type PresenceUpdate = {
 
 type PresenceRow = {
   chatStatus?: string | null
+  preferredChatStatus?: string | null
   workStatus?: string | null
   lastSeenAt?: Date | string | null
 } | null
@@ -92,6 +93,7 @@ export async function getUserPresenceSnapshot(userId: string) {
     where: { userId },
     select: {
       chatStatus: true,
+      preferredChatStatus: true,
       workStatus: true,
       lastSeenAt: true,
     },
@@ -123,23 +125,30 @@ export async function updateUserPresence({
     where: { userId },
     select: {
       chatStatus: true,
+      preferredChatStatus: true,
       workStatus: true,
       lastSeenAt: true,
     },
   })
   const before = toPresenceSnapshot(previousPresence)
+  const preferredChatStatus =
+    chatStatus ??
+    normalizeUserChatStatus(previousPresence?.preferredChatStatus, "online")
+  const activeChatStatus = chatStatus ?? preferredChatStatus
 
   await prisma.$transaction(async (tx) => {
     await tx.userPresence.upsert({
       where: { userId },
       create: {
         userId,
-        chatStatus: chatStatus ?? (state === "active" ? "online" : "offline"),
+        chatStatus: state === "active" ? activeChatStatus : "offline",
+        preferredChatStatus,
         workStatus: workStatus ?? "available",
         lastSeenAt: now,
       },
       update: {
-        ...(chatStatus ? { chatStatus } : {}),
+        ...(state === "active" ? { chatStatus: activeChatStatus } : {}),
+        ...(chatStatus ? { preferredChatStatus: chatStatus } : {}),
         ...(workStatus ? { workStatus } : {}),
         lastSeenAt: now,
       },
@@ -205,6 +214,7 @@ export async function updateUserPresence({
     where: { userId },
     select: {
       chatStatus: true,
+      preferredChatStatus: true,
       workStatus: true,
       lastSeenAt: true,
     },
@@ -221,7 +231,6 @@ export async function updateUserPresence({
 export async function forceUserOnline(userId: string) {
   return updateUserPresence({
     userId,
-    chatStatus: "online",
     state: "active",
     source: "presence:login",
   })
