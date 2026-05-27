@@ -14,6 +14,7 @@ import type {
 import type {
   Contact,
   ContactConversationPreference,
+  MessageConversationPreference,
   Message,
 } from "@/lib/chat-data";
 import type { LoanRequest } from "@/lib/loan-data";
@@ -198,7 +199,79 @@ function getMessageStatusWithHighestPriority(
     : second;
 }
 
+function getMessagePreferenceFreshnessTime(
+  preference: MessageConversationPreference,
+) {
+  return preference.updatedAt?.getTime();
+}
+
+function getFreshestMessagePreference(
+  storedPreference: MessageConversationPreference,
+  incomingPreference: MessageConversationPreference,
+) {
+  const storedUpdatedAt = getMessagePreferenceFreshnessTime(storedPreference);
+  const incomingUpdatedAt = getMessagePreferenceFreshnessTime(incomingPreference);
+
+  if (incomingUpdatedAt === undefined && storedUpdatedAt !== undefined) {
+    return storedPreference;
+  }
+
+  if (incomingUpdatedAt !== undefined && storedUpdatedAt !== undefined) {
+    return incomingUpdatedAt >= storedUpdatedAt
+      ? incomingPreference
+      : storedPreference;
+  }
+
+  return incomingPreference;
+}
+
+function mergeMessagePreferences(
+  storedPreferences: Message["messagePreferencesByUserId"],
+  incomingPreferences: Message["messagePreferencesByUserId"],
+) {
+  if (!storedPreferences && !incomingPreferences) return undefined;
+
+  const userIds = new Set([
+    ...Object.keys(storedPreferences ?? {}),
+    ...Object.keys(incomingPreferences ?? {}),
+  ]);
+  const preferencesByUserId: Record<string, MessageConversationPreference> = {};
+
+  userIds.forEach((userId) => {
+    const storedPreference = storedPreferences?.[userId];
+    const incomingPreference = incomingPreferences?.[userId];
+
+    if (!storedPreference && !incomingPreference) return;
+
+    if (storedPreference && incomingPreference) {
+      preferencesByUserId[userId] = getFreshestMessagePreference(
+        storedPreference,
+        incomingPreference,
+      );
+      return;
+    }
+
+    if (storedPreference) {
+      preferencesByUserId[userId] = storedPreference;
+      return;
+    }
+
+    if (incomingPreference) {
+      preferencesByUserId[userId] = incomingPreference;
+    }
+  });
+
+  return preferencesByUserId;
+}
+
 function mergeMessage(storedMessage: Message, incomingMessage: Message) {
+  const deletedForEveryone =
+    storedMessage.deletedForEveryone === true ||
+    incomingMessage.deletedForEveryone === true
+      ? true
+      : (incomingMessage.deletedForEveryone ??
+        storedMessage.deletedForEveryone);
+
   return {
     ...storedMessage,
     ...incomingMessage,
@@ -211,24 +284,29 @@ function mergeMessage(storedMessage: Message, incomingMessage: Message) {
       incomingMessage.deletedForMe === true
         ? true
         : (incomingMessage.deletedForMe ?? storedMessage.deletedForMe),
-    deletedForEveryone:
-      storedMessage.deletedForEveryone === true ||
-      incomingMessage.deletedForEveryone === true
-        ? true
-        : (incomingMessage.deletedForEveryone ??
-          storedMessage.deletedForEveryone),
+    deletedForEveryone,
     hiddenForUserIds: mergeStringLists(
       storedMessage.hiddenForUserIds,
       incomingMessage.hiddenForUserIds,
     ),
-    pinnedForUserIds: mergeOptionalStringLists(
-      storedMessage.pinnedForUserIds,
-      incomingMessage.pinnedForUserIds,
-    ),
-    favoriteForUserIds: mergeOptionalStringLists(
-      storedMessage.favoriteForUserIds,
-      incomingMessage.favoriteForUserIds,
-    ),
+    pinnedForUserIds: deletedForEveryone
+      ? []
+      : mergeOptionalStringLists(
+          storedMessage.pinnedForUserIds,
+          incomingMessage.pinnedForUserIds,
+        ),
+    favoriteForUserIds: deletedForEveryone
+      ? []
+      : mergeOptionalStringLists(
+          storedMessage.favoriteForUserIds,
+          incomingMessage.favoriteForUserIds,
+        ),
+    messagePreferencesByUserId: deletedForEveryone
+      ? {}
+      : mergeMessagePreferences(
+          storedMessage.messagePreferencesByUserId,
+          incomingMessage.messagePreferencesByUserId,
+        ),
   };
 }
 

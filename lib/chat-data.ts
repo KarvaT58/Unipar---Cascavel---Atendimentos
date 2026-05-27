@@ -39,6 +39,7 @@ export interface Message {
   isFavorite?: boolean;
   pinnedForUserIds?: string[];
   favoriteForUserIds?: string[];
+  messagePreferencesByUserId?: Record<string, MessageConversationPreference>;
   isEdited?: boolean;
   deletedForMe?: boolean;
   hiddenForUserIds?: string[];
@@ -130,28 +131,23 @@ function hasScopedMessageFlag(
   return Boolean(fallbackFlag);
 }
 
-function toggleScopedMessageFlag(
-  scopedUserIds: string[] | undefined,
-  fallbackFlag: boolean | undefined,
-  userId: string,
-) {
-  const currentUserIds = scopedUserIds
-    ? [...scopedUserIds]
-    : fallbackFlag
-      ? [userId]
-      : [];
-  const nextUserIds = currentUserIds.includes(userId)
-    ? currentUserIds.filter((currentUserId) => currentUserId !== userId)
-    : [...currentUserIds, userId];
-
-  return Array.from(new Set(nextUserIds));
-}
-
 export function isMessagePinnedForUser(message: Message, userId: string) {
+  const userPreference = message.messagePreferencesByUserId?.[userId];
+
+  if (userPreference?.isPinned !== undefined) {
+    return userPreference.isPinned;
+  }
+
   return hasScopedMessageFlag(message.pinnedForUserIds, message.isPinned, userId);
 }
 
 export function isMessageFavoriteForUser(message: Message, userId: string) {
+  const userPreference = message.messagePreferencesByUserId?.[userId];
+
+  if (userPreference?.isFavorite !== undefined) {
+    return userPreference.isFavorite;
+  }
+
   return hasScopedMessageFlag(
     message.favoriteForUserIds,
     message.isFavorite,
@@ -163,14 +159,28 @@ export function toggleMessagePinnedForUser(
   message: Message,
   userId: string,
 ): Message {
+  const nextIsPinned = !isMessagePinnedForUser(message, userId);
+  const currentPreference = message.messagePreferencesByUserId?.[userId];
+
   return {
     ...message,
     isPinned: undefined,
-    pinnedForUserIds: toggleScopedMessageFlag(
-      message.pinnedForUserIds,
-      message.isPinned,
-      userId,
+    pinnedForUserIds: Array.from(
+      new Set([
+        ...(message.pinnedForUserIds ?? []).filter(
+          (currentUserId) => currentUserId !== userId,
+        ),
+        ...(nextIsPinned ? [userId] : []),
+      ]),
     ),
+    messagePreferencesByUserId: {
+      ...(message.messagePreferencesByUserId ?? {}),
+      [userId]: {
+        ...currentPreference,
+        isPinned: nextIsPinned,
+        updatedAt: new Date(),
+      },
+    },
   };
 }
 
@@ -178,15 +188,35 @@ export function toggleMessageFavoriteForUser(
   message: Message,
   userId: string,
 ): Message {
+  const nextIsFavorite = !isMessageFavoriteForUser(message, userId);
+  const currentPreference = message.messagePreferencesByUserId?.[userId];
+
   return {
     ...message,
     isFavorite: undefined,
-    favoriteForUserIds: toggleScopedMessageFlag(
-      message.favoriteForUserIds,
-      message.isFavorite,
-      userId,
+    favoriteForUserIds: Array.from(
+      new Set([
+        ...(message.favoriteForUserIds ?? []).filter(
+          (currentUserId) => currentUserId !== userId,
+        ),
+        ...(nextIsFavorite ? [userId] : []),
+      ]),
     ),
+    messagePreferencesByUserId: {
+      ...(message.messagePreferencesByUserId ?? {}),
+      [userId]: {
+        ...currentPreference,
+        isFavorite: nextIsFavorite,
+        updatedAt: new Date(),
+      },
+    },
   };
+}
+
+export interface MessageConversationPreference {
+  isPinned?: boolean;
+  isFavorite?: boolean;
+  updatedAt: Date;
 }
 
 export interface ContactConversationPreference {

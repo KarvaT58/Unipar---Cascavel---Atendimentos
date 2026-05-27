@@ -2156,6 +2156,7 @@ export function ChatWindow({
               isFavorite: false,
               pinnedForUserIds: [],
               favoriteForUserIds: [],
+              messagePreferencesByUserId: {},
               deletedForEveryone: true,
             }
           : message,
