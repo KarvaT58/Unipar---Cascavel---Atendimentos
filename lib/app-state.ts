@@ -22,6 +22,13 @@ export interface GroupMetadataState {
   updatedAt?: Date;
 }
 
+export interface KanbanBoardState {
+  columns: KanbanColumn[];
+  cardsById: Record<string, KanbanCard>;
+  labels: KanbanLabel[];
+  updatedAt?: Date;
+}
+
 export interface TypingIndicatorState {
   scope: "chat" | "group";
   userId: string;
@@ -62,6 +69,7 @@ export interface AppState {
   kanbanColumns: KanbanColumn[];
   kanbanCardsById: Record<string, KanbanCard>;
   kanbanLabels: KanbanLabel[];
+  kanbanBoardsByUserId: Record<string, KanbanBoardState>;
   helpItems: HelpContentItem[];
   extensionItems: ExtensionContentItem[];
   typingIndicators: Record<string, TypingIndicatorState>;
@@ -92,6 +100,7 @@ export const EMPTY_APP_STATE: AppState = {
   kanbanColumns: [],
   kanbanCardsById: {},
   kanbanLabels: [],
+  kanbanBoardsByUserId: {},
   helpItems: [],
   extensionItems: [],
   typingIndicators: {},
@@ -406,6 +415,67 @@ function mergeGroupMetadataCollections(
   );
 }
 
+function normalizeKanbanBoard(board: KanbanBoardState): KanbanBoardState {
+  return {
+    columns: board.columns ?? [],
+    cardsById: board.cardsById ?? {},
+    labels: board.labels ?? [],
+    updatedAt: board.updatedAt,
+  };
+}
+
+function getKanbanBoardFreshnessTime(board: KanbanBoardState) {
+  return board.updatedAt?.getTime();
+}
+
+function getFreshestKanbanBoard(
+  storedBoard: KanbanBoardState,
+  incomingBoard: KanbanBoardState,
+) {
+  const storedUpdatedAt = getKanbanBoardFreshnessTime(storedBoard);
+  const incomingUpdatedAt = getKanbanBoardFreshnessTime(incomingBoard);
+
+  if (incomingUpdatedAt === undefined && storedUpdatedAt !== undefined) {
+    return storedBoard;
+  }
+
+  if (incomingUpdatedAt !== undefined && storedUpdatedAt !== undefined) {
+    return incomingUpdatedAt >= storedUpdatedAt ? incomingBoard : storedBoard;
+  }
+
+  return incomingBoard;
+}
+
+function mergeKanbanBoardsByUserId(
+  storedBoardsByUserId: Record<string, KanbanBoardState>,
+  incomingBoardsByUserId: Record<string, KanbanBoardState>,
+) {
+  const userIds = new Set([
+    ...Object.keys(storedBoardsByUserId),
+    ...Object.keys(incomingBoardsByUserId),
+  ]);
+
+  return Object.fromEntries(
+    Array.from(userIds).map((userId) => {
+      const storedBoard = storedBoardsByUserId[userId];
+      const incomingBoard = incomingBoardsByUserId[userId];
+
+      if (!storedBoard) {
+        return [userId, normalizeKanbanBoard(incomingBoard)];
+      }
+
+      if (!incomingBoard) {
+        return [userId, normalizeKanbanBoard(storedBoard)];
+      }
+
+      return [
+        userId,
+        normalizeKanbanBoard(getFreshestKanbanBoard(storedBoard, incomingBoard)),
+      ];
+    }),
+  );
+}
+
 function sortAppPageRecordList(records: AppPageRecord[]) {
   return [...records].sort(
     (firstRecord, secondRecord) =>
@@ -697,6 +767,10 @@ export function mergeAppStates(
       deletedAnnouncementEventIds,
     ),
     deletedAnnouncementEventIds,
+    kanbanBoardsByUserId: mergeKanbanBoardsByUserId(
+      storedState.kanbanBoardsByUserId,
+      incomingState.kanbanBoardsByUserId,
+    ),
     typingIndicators: mergeTypingIndicators(
       storedState.typingIndicators,
       incomingState.typingIndicators,

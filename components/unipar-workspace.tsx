@@ -91,6 +91,7 @@ import {
   serializeAppState,
   type AppState,
   type GroupMetadataState,
+  type KanbanBoardState,
   type TypingIndicatorState,
 } from "@/lib/app-state";
 import {
@@ -499,6 +500,32 @@ function touchGroupMetadata(metadata: GroupMetadata): GroupMetadata {
     ...metadata,
     updatedAt: new Date(),
   });
+}
+
+function createEmptyKanbanBoard(): KanbanBoardState {
+  return {
+    columns: [],
+    cardsById: {},
+    labels: [],
+  };
+}
+
+function getKanbanBoardForUser(
+  boardsByUserId: Record<string, KanbanBoardState>,
+  userId: string,
+) {
+  if (!userId) return createEmptyKanbanBoard();
+
+  return boardsByUserId[userId] ?? createEmptyKanbanBoard();
+}
+
+function touchKanbanBoard(board: KanbanBoardState): KanbanBoardState {
+  return {
+    columns: board.columns,
+    cardsById: board.cardsById,
+    labels: board.labels,
+    updatedAt: new Date(),
+  };
 }
 
 function canUserSeeGroup(
@@ -1074,15 +1101,9 @@ export function UniparWorkspace({
   const [focusedAnnouncementEventId, setFocusedAnnouncementEventId] = useState<
     string | null
   >(null);
-  const [kanbanColumns, setKanbanColumns] = useState<KanbanColumn[]>(
-    EMPTY_APP_STATE.kanbanColumns,
-  );
-  const [kanbanCardsById, setKanbanCardsById] = useState<
-    Record<string, KanbanCard>
-  >(EMPTY_APP_STATE.kanbanCardsById);
-  const [kanbanLabels, setKanbanLabels] = useState<KanbanLabel[]>(
-    EMPTY_APP_STATE.kanbanLabels,
-  );
+  const [kanbanBoardsByUserId, setKanbanBoardsByUserId] = useState<
+    Record<string, KanbanBoardState>
+  >(EMPTY_APP_STATE.kanbanBoardsByUserId);
   const [focusedKanbanCardId, setFocusedKanbanCardId] = useState<string | null>(
     null,
   );
@@ -1099,6 +1120,82 @@ export function UniparWorkspace({
     useState<string | null>(null);
   const [kanbanDueReminderCountdown, setKanbanDueReminderCountdown] =
     useState(0);
+  const currentKanbanBoard = useMemo(
+    () =>
+      getKanbanBoardForUser(
+        kanbanBoardsByUserId,
+        currentAnnouncementUser.id,
+      ),
+    [currentAnnouncementUser.id, kanbanBoardsByUserId],
+  );
+  const kanbanColumns = currentKanbanBoard.columns;
+  const kanbanCardsById = currentKanbanBoard.cardsById;
+  const kanbanLabels = currentKanbanBoard.labels;
+  const setCurrentKanbanBoard = useCallback(
+    (nextBoard: SetStateAction<KanbanBoardState>) => {
+      const userId = currentAnnouncementUser.id;
+      if (!userId) return;
+
+      setKanbanBoardsByUserId((currentBoardsByUserId) => {
+        const currentBoard = getKanbanBoardForUser(
+          currentBoardsByUserId,
+          userId,
+        );
+        const resolvedBoard =
+          typeof nextBoard === "function"
+            ? nextBoard(currentBoard)
+            : nextBoard;
+
+        return {
+          ...currentBoardsByUserId,
+          [userId]: touchKanbanBoard(resolvedBoard),
+        };
+      });
+    },
+    [currentAnnouncementUser.id],
+  );
+  const setKanbanColumns = useCallback<
+    Dispatch<SetStateAction<KanbanColumn[]>>
+  >(
+    (nextColumns) => {
+      setCurrentKanbanBoard((currentBoard) => ({
+        ...currentBoard,
+        columns:
+          typeof nextColumns === "function"
+            ? nextColumns(currentBoard.columns)
+            : nextColumns,
+      }));
+    },
+    [setCurrentKanbanBoard],
+  );
+  const setKanbanCardsById = useCallback<
+    Dispatch<SetStateAction<Record<string, KanbanCard>>>
+  >(
+    (nextCardsById) => {
+      setCurrentKanbanBoard((currentBoard) => ({
+        ...currentBoard,
+        cardsById:
+          typeof nextCardsById === "function"
+            ? nextCardsById(currentBoard.cardsById)
+            : nextCardsById,
+      }));
+    },
+    [setCurrentKanbanBoard],
+  );
+  const setKanbanLabels = useCallback<
+    Dispatch<SetStateAction<KanbanLabel[]>>
+  >(
+    (nextLabels) => {
+      setCurrentKanbanBoard((currentBoard) => ({
+        ...currentBoard,
+        labels:
+          typeof nextLabels === "function"
+            ? nextLabels(currentBoard.labels)
+            : nextLabels,
+      }));
+    },
+    [setCurrentKanbanBoard],
+  );
   const [reminderNow, setReminderNow] = useState(() => new Date());
   const [activePriorityMessageAlert, setActivePriorityMessageAlert] =
     useState<PriorityMessageAlert>(null);
@@ -1359,9 +1456,10 @@ export function UniparWorkspace({
       loanRequests,
       announcementEvents,
       deletedAnnouncementEventIds,
-      kanbanColumns,
-      kanbanCardsById,
-      kanbanLabels,
+      kanbanColumns: EMPTY_APP_STATE.kanbanColumns,
+      kanbanCardsById: EMPTY_APP_STATE.kanbanCardsById,
+      kanbanLabels: EMPTY_APP_STATE.kanbanLabels,
+      kanbanBoardsByUserId,
       helpItems,
       extensionItems,
       typingIndicators: EMPTY_APP_STATE.typingIndicators,
@@ -1381,9 +1479,7 @@ export function UniparWorkspace({
       groupMetadataById,
       groups,
       helpItems,
-      kanbanCardsById,
-      kanbanColumns,
-      kanbanLabels,
+      kanbanBoardsByUserId,
       loanRequests,
       messagesByContact,
       serviceTickets,
@@ -1453,9 +1549,7 @@ export function UniparWorkspace({
     setLoanRequests(nextState.loanRequests);
     setAnnouncementEvents(nextState.announcementEvents);
     setDeletedAnnouncementEventIds(nextState.deletedAnnouncementEventIds);
-    setKanbanColumns(nextState.kanbanColumns);
-    setKanbanCardsById(nextState.kanbanCardsById);
-    setKanbanLabels(nextState.kanbanLabels);
+    setKanbanBoardsByUserId(nextState.kanbanBoardsByUserId);
     setHelpItems(nextState.helpItems);
     setExtensionItems(nextState.extensionItems);
     setSelectedContact((currentContact) =>
