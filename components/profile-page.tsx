@@ -28,7 +28,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   Select,
@@ -458,19 +457,6 @@ export function ProfilePage() {
                       />
                     </div>
 
-                    <div className="grid gap-2">
-                      <Label htmlFor="profile-name">Nome de exibição</Label>
-                      <Input
-                        id="profile-name"
-                        value={profile.name}
-                        maxLength={80}
-                        onChange={(event) =>
-                          updateProfile({ name: event.target.value })
-                        }
-                        placeholder="Nome exibido no sistema"
-                        className="h-10"
-                      />
-                    </div>
                   </section>
 
                   <section className="grid gap-4 border-b pb-5">
@@ -827,10 +813,10 @@ function toAdminUser(
   now: Date,
 ): AdminUser {
   return {
-    id: profile.id,
-    name: profile.name,
-    email: profile.email,
-    sector: profile.sector,
+    id: currentUser?.id ?? profile.id,
+    name: currentUser?.name ?? profile.name,
+    email: currentUser?.email ?? profile.email,
+    sector: currentUser?.sector ?? profile.sector,
     password: currentUser?.password ?? "",
     isAdmin: currentUser?.isAdmin ?? profile.isAdmin,
     status: currentUser?.status ?? "active",
