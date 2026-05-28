@@ -96,6 +96,7 @@ import {
   getUploadSizeLimitMessage,
   splitFilesByUploadSize,
 } from "@/lib/upload-limits";
+import { uploadFileAttachment } from "@/lib/upload-client";
 
 interface ServiceTicketsPageProps {
   currentUser: ServiceTicketUser;
@@ -170,6 +171,64 @@ function createId(prefix: string) {
   return `${prefix}-${Date.now()}`;
 }
 
+function getClientErrorMessage(error: unknown) {
+  return error instanceof Error
+    ? error.message
+    : "NÃ£o foi possÃ­vel concluir a operaÃ§Ã£o.";
+}
+
+function revokeTemporaryTicketAttachmentUrl(url: string | null | undefined) {
+  if (url?.startsWith("blob:")) URL.revokeObjectURL(url);
+}
+
+function toServiceTicketAttachmentKind(
+  kind: Awaited<ReturnType<typeof uploadFileAttachment>>["kind"],
+): ServiceTicketAttachmentKind {
+  return kind === "image" || kind === "video" ? kind : "document";
+}
+
+async function uploadServiceTicketAttachment(
+  file: File,
+): Promise<ServiceTicketAttachment> {
+  const upload = await uploadFileAttachment(file);
+
+  return {
+    id: upload.id,
+    name: upload.name,
+    size: upload.size,
+    kind: toServiceTicketAttachmentKind(upload.kind),
+    url: upload.url,
+    extension: upload.extension || getFileExtension(upload.name),
+  };
+}
+
+async function uploadServiceTicketAttachments(
+  files: File[],
+  errorTitle: string,
+) {
+  const uploadResults = await Promise.allSettled(
+    files.map(uploadServiceTicketAttachment),
+  );
+  const uploadedAttachments = uploadResults.flatMap((result) =>
+    result.status === "fulfilled" ? [result.value] : [],
+  );
+  const rejectedUploads = uploadResults.filter(
+    (result) => result.status === "rejected",
+  );
+
+  if (rejectedUploads.length > 0) {
+    toast.error(errorTitle, {
+      description: getClientErrorMessage(
+        rejectedUploads[0].status === "rejected"
+          ? rejectedUploads[0].reason
+          : undefined,
+      ),
+    });
+  }
+
+  return uploadedAttachments;
+}
+
 function getDefaultTargetSector(currentSector: Sector) {
   return SECTOR_OPTIONS.find((sector) => sector !== currentSector) ?? currentSector;
 }
@@ -179,13 +238,6 @@ function getFileSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
 
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function getAttachmentKind(file: File): ServiceTicketAttachmentKind {
-  if (file.type.startsWith("image/")) return "image";
-  if (file.type.startsWith("video/")) return "video";
-
-  return "document";
 }
 
 function getFileExtension(fileName: string) {
@@ -586,6 +638,8 @@ export function ServiceTicketsPage({
   const [createAttachments, setCreateAttachments] = useState<
     ServiceTicketAttachment[]
   >([]);
+  const [isUploadingCreateAttachment, setIsUploadingCreateAttachment] =
+    useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [openActionMenuTicketId, setOpenActionMenuTicketId] = useState<
     string | null
@@ -594,12 +648,16 @@ export function ServiceTicketsPage({
   const [chatAttachments, setChatAttachments] = useState<
     ServiceTicketAttachment[]
   >([]);
+  const [isUploadingChatAttachment, setIsUploadingChatAttachment] =
+    useState(false);
   const [isInternalMessage, setIsInternalMessage] = useState(false);
   const [closeTicketId, setCloseTicketId] = useState<string | null>(null);
   const [closeDescription, setCloseDescription] = useState("");
   const [closeAttachments, setCloseAttachments] = useState<
     ServiceTicketAttachment[]
   >([]);
+  const [isUploadingCloseAttachment, setIsUploadingCloseAttachment] =
+    useState(false);
   const [reopenTicketId, setReopenTicketId] = useState<string | null>(null);
   const [reopenReason, setReopenReason] = useState("");
   const [transferTicketId, setTransferTicketId] = useState<string | null>(null);
@@ -1086,7 +1144,9 @@ export function ServiceTicketsPage({
 
   const clearChatDraft = (revokeAttachments = true) => {
     if (revokeAttachments) {
-      chatAttachments.forEach((attachment) => URL.revokeObjectURL(attachment.url));
+      chatAttachments.forEach((attachment) =>
+        revokeTemporaryTicketAttachmentUrl(attachment.url),
+      );
     }
 
     setChatMessage("");
@@ -1104,7 +1164,9 @@ export function ServiceTicketsPage({
   };
 
   const resetCreateForm = () => {
-    createAttachments.forEach((attachment) => URL.revokeObjectURL(attachment.url));
+    createAttachments.forEach((attachment) =>
+      revokeTemporaryTicketAttachmentUrl(attachment.url),
+    );
     setCreateTitle("");
     setCreateDescription("");
     setCreateTargetSector(getDefaultTargetSector(currentUser.sector));
@@ -1116,16 +1178,10 @@ export function ServiceTicketsPage({
     }
   };
 
-  const createAttachmentFromFile = (file: File): ServiceTicketAttachment => ({
-    id: createId("ticket-attachment"),
-    name: file.name,
-    size: file.size,
-    kind: getAttachmentKind(file),
-    url: URL.createObjectURL(file),
-    extension: getFileExtension(file.name),
-  });
-
-  const handleAttachmentChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleAttachmentChange = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const input = event.currentTarget;
     const files = Array.from(event.target.files ?? []);
     if (files.length === 0) return;
 
@@ -1152,11 +1208,29 @@ export function ServiceTicketsPage({
       });
     }
 
-    setCreateAttachments((currentAttachments) => [
-      ...currentAttachments,
-      ...acceptedFiles.map(createAttachmentFromFile),
-    ]);
-    event.target.value = "";
+    if (acceptedFiles.length > 0) {
+      setIsUploadingCreateAttachment(true);
+
+      try {
+        const uploadedAttachments = await uploadServiceTicketAttachments(
+          acceptedFiles,
+          acceptedFiles.length === 1
+            ? "NÃ£o foi possÃ­vel enviar o anexo."
+            : "NÃ£o foi possÃ­vel enviar alguns anexos.",
+        );
+
+        if (uploadedAttachments.length > 0) {
+          setCreateAttachments((currentAttachments) => [
+            ...currentAttachments,
+            ...uploadedAttachments,
+          ]);
+        }
+      } finally {
+        setIsUploadingCreateAttachment(false);
+      }
+    }
+
+    input.value = "";
   };
 
   const removeCreateAttachment = (attachmentId: string) => {
@@ -1165,7 +1239,9 @@ export function ServiceTicketsPage({
         (attachment) => attachment.id === attachmentId,
       );
 
-      if (removedAttachment) URL.revokeObjectURL(removedAttachment.url);
+      if (removedAttachment) {
+        revokeTemporaryTicketAttachmentUrl(removedAttachment.url);
+      }
 
       return currentAttachments.filter(
         (attachment) => attachment.id !== attachmentId,
@@ -1173,7 +1249,10 @@ export function ServiceTicketsPage({
     });
   };
 
-  const handleChatAttachmentChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleChatAttachmentChange = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const input = event.currentTarget;
     const files = Array.from(event.target.files ?? []);
     if (files.length === 0) return;
 
@@ -1202,13 +1281,28 @@ export function ServiceTicketsPage({
     }
 
     if (acceptedFiles.length > 0) {
-      setChatAttachments((currentAttachments) => [
-        ...currentAttachments,
-        ...acceptedFiles.map(createAttachmentFromFile),
-      ]);
+      setIsUploadingChatAttachment(true);
+
+      try {
+        const uploadedAttachments = await uploadServiceTicketAttachments(
+          acceptedFiles,
+          acceptedFiles.length === 1
+            ? "NÃ£o foi possÃ­vel enviar o anexo."
+            : "NÃ£o foi possÃ­vel enviar alguns anexos.",
+        );
+
+        if (uploadedAttachments.length > 0) {
+          setChatAttachments((currentAttachments) => [
+            ...currentAttachments,
+            ...uploadedAttachments,
+          ]);
+        }
+      } finally {
+        setIsUploadingChatAttachment(false);
+      }
     }
 
-    event.target.value = "";
+    input.value = "";
   };
 
   const removeChatAttachment = (attachmentId: string) => {
@@ -1217,7 +1311,9 @@ export function ServiceTicketsPage({
         (attachment) => attachment.id === attachmentId,
       );
 
-      if (removedAttachment) URL.revokeObjectURL(removedAttachment.url);
+      if (removedAttachment) {
+        revokeTemporaryTicketAttachmentUrl(removedAttachment.url);
+      }
 
       return currentAttachments.filter(
         (attachment) => attachment.id !== attachmentId,
@@ -1225,9 +1321,10 @@ export function ServiceTicketsPage({
     });
   };
 
-  const handleCloseAttachmentChange = (
+  const handleCloseAttachmentChange = async (
     event: ChangeEvent<HTMLInputElement>,
   ) => {
+    const input = event.currentTarget;
     const files = Array.from(event.target.files ?? []);
     if (files.length === 0) return;
 
@@ -1255,13 +1352,28 @@ export function ServiceTicketsPage({
     }
 
     if (acceptedFiles.length > 0) {
-      setCloseAttachments((currentAttachments) => [
-        ...currentAttachments,
-        ...acceptedFiles.map(createAttachmentFromFile),
-      ]);
+      setIsUploadingCloseAttachment(true);
+
+      try {
+        const uploadedAttachments = await uploadServiceTicketAttachments(
+          acceptedFiles,
+          acceptedFiles.length === 1
+            ? "NÃ£o foi possÃ­vel enviar o anexo."
+            : "NÃ£o foi possÃ­vel enviar alguns anexos.",
+        );
+
+        if (uploadedAttachments.length > 0) {
+          setCloseAttachments((currentAttachments) => [
+            ...currentAttachments,
+            ...uploadedAttachments,
+          ]);
+        }
+      } finally {
+        setIsUploadingCloseAttachment(false);
+      }
     }
 
-    event.target.value = "";
+    input.value = "";
   };
 
   const removeCloseAttachment = (attachmentId: string) => {
@@ -1270,7 +1382,9 @@ export function ServiceTicketsPage({
         (attachment) => attachment.id === attachmentId,
       );
 
-      if (removedAttachment) URL.revokeObjectURL(removedAttachment.url);
+      if (removedAttachment) {
+        revokeTemporaryTicketAttachmentUrl(removedAttachment.url);
+      }
 
       return currentAttachments.filter(
         (attachment) => attachment.id !== attachmentId,
@@ -1280,7 +1394,9 @@ export function ServiceTicketsPage({
 
   const clearCloseDraft = (revokeAttachments = true) => {
     if (revokeAttachments) {
-      closeAttachments.forEach((attachment) => URL.revokeObjectURL(attachment.url));
+      closeAttachments.forEach((attachment) =>
+        revokeTemporaryTicketAttachmentUrl(attachment.url),
+      );
     }
 
     setCloseDescription("");
@@ -1293,6 +1409,11 @@ export function ServiceTicketsPage({
 
   const handleCreateTicket = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (isUploadingCreateAttachment) {
+      toast.info("Aguarde o envio dos anexos terminar.");
+      return;
+    }
 
     const title = createTitle.trim();
     const description = createDescription.trim();
@@ -1406,6 +1527,11 @@ export function ServiceTicketsPage({
 
     if (!selectedTicket || selectedTicket.status === "completed") return;
 
+    if (isUploadingChatAttachment) {
+      toast.info("Aguarde o envio dos anexos terminar.");
+      return;
+    }
+
     const content = chatMessage.trim();
     if (!content && chatAttachments.length === 0) return;
 
@@ -1433,6 +1559,11 @@ export function ServiceTicketsPage({
 
   const handleCloseTicket = () => {
     if (!closeTicket) return;
+
+    if (isUploadingCloseAttachment) {
+      toast.info("Aguarde o envio dos anexos terminar.");
+      return;
+    }
 
     const description = closeDescription.trim();
 
@@ -1820,6 +1951,7 @@ export function ServiceTicketsPage({
                 multiple
                 accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
                 className="hidden"
+                disabled={isUploadingChatAttachment}
                 onChange={handleChatAttachmentChange}
               />
               {chatAttachments.length > 0 && (
@@ -1841,6 +1973,7 @@ export function ServiceTicketsPage({
                   size="icon-lg"
                   className="mb-0.5 h-10 w-10 shrink-0"
                   disabled={
+                    isUploadingChatAttachment ||
                     chatAttachments.length >= MAX_TICKET_MESSAGE_ATTACHMENTS
                   }
                   onClick={() => chatFileInputRef.current?.click()}
@@ -1870,6 +2003,7 @@ export function ServiceTicketsPage({
                   type="submit"
                   size="icon-lg"
                   className="mb-0.5 h-10 w-10 shrink-0"
+                  disabled={isUploadingChatAttachment}
                 >
                   <Send className="h-4 w-4" />
                 </Button>
@@ -2408,11 +2542,14 @@ export function ServiceTicketsPage({
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={createAttachments.length >= MAX_TICKET_ATTACHMENTS}
+                  disabled={
+                    isUploadingCreateAttachment ||
+                    createAttachments.length >= MAX_TICKET_ATTACHMENTS
+                  }
                   onClick={() => fileInputRef.current?.click()}
                 >
                   <Paperclip className="mr-1 h-4 w-4" />
-                  Adicionar
+                  {isUploadingCreateAttachment ? "Enviando..." : "Adicionar"}
                 </Button>
               </div>
               <input
@@ -2421,6 +2558,7 @@ export function ServiceTicketsPage({
                 multiple
                 accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
                 className="hidden"
+                disabled={isUploadingCreateAttachment}
                 onChange={handleAttachmentChange}
               />
               {createAttachments.length === 0 ? (
@@ -2449,7 +2587,7 @@ export function ServiceTicketsPage({
               >
                 Cancelar
               </Button>
-              <Button type="submit">
+              <Button type="submit" disabled={isUploadingCreateAttachment}>
                 <Headphones className="mr-1 h-4 w-4" />
                 Abrir chamado
               </Button>
@@ -2496,11 +2634,14 @@ export function ServiceTicketsPage({
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={closeAttachments.length >= MAX_TICKET_ATTACHMENTS}
+                  disabled={
+                    isUploadingCloseAttachment ||
+                    closeAttachments.length >= MAX_TICKET_ATTACHMENTS
+                  }
                   onClick={() => closeFileInputRef.current?.click()}
                 >
                   <Paperclip className="mr-1 h-4 w-4" />
-                  Adicionar
+                  {isUploadingCloseAttachment ? "Enviando..." : "Adicionar"}
                 </Button>
               </div>
               <input
@@ -2509,6 +2650,7 @@ export function ServiceTicketsPage({
                 multiple
                 accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
                 className="hidden"
+                disabled={isUploadingCloseAttachment}
                 onChange={handleCloseAttachmentChange}
               />
               {closeAttachments.length === 0 ? (
@@ -2540,7 +2682,11 @@ export function ServiceTicketsPage({
             >
               Cancelar
             </Button>
-            <Button type="button" onClick={handleCloseTicket}>
+            <Button
+              type="button"
+              disabled={isUploadingCloseAttachment}
+              onClick={handleCloseTicket}
+            >
               Encerrar
             </Button>
           </div>
