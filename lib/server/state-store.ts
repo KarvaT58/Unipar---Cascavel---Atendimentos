@@ -23,6 +23,15 @@ import {
 } from "@/lib/server/audit-log"
 import { getHydratedPresenceSnapshot } from "@/lib/server/presence"
 import {
+  applyDatabaseModuleRead,
+  areDatabaseBackedAppStateModulesEqual,
+  hasDatabaseBackedAppStateModuleData,
+  hydrateDatabaseBackedAppStateModules,
+  omitDatabaseBackedAppStateModules,
+  readDatabaseBackedAppStateModules,
+  syncDatabaseBackedAppStateModules,
+} from "@/lib/server/app-state-module-store"
+import {
   areServiceTicketListsEqual,
   hydrateServiceTicketsFromDatabase,
   hydrateServiceTicketsWithDatabaseRows,
@@ -166,23 +175,36 @@ export async function readAppState(): Promise<AppStateEnvelope> {
       await prisma.appStateDocument.create({
         data: {
           key: STATE_KEY,
-          data: toJsonValue(omitDatabaseBackedServiceTickets(EMPTY_APP_STATE)),
+          data: toJsonValue(
+            omitDatabaseBackedAppStateModules(
+              omitDatabaseBackedServiceTickets(EMPTY_APP_STATE)
+            )
+          ),
           revision: BigInt(0),
         },
       })
 
       return {
         state: await hydrateAppStateAuthUsers(
-          await hydrateServiceTicketsFromDatabase(EMPTY_APP_STATE)
+          await hydrateServiceTicketsFromDatabase(
+            await hydrateDatabaseBackedAppStateModules(EMPTY_APP_STATE)
+          )
         ),
         revision: 0,
         databaseConnected: true,
       }
     }
 
+    const documentState = normalizeAppState(document.data)
     const state = await hydrateServiceTicketsFromDatabase(
-      normalizeAppState(document.data)
+      await hydrateDatabaseBackedAppStateModules(documentState)
     )
+
+    if (hasDatabaseBackedAppStateModuleData(documentState)) {
+      await migrateEmbeddedDatabaseBackedModules(state).catch((error) => {
+        console.error(error)
+      })
+    }
 
     return {
       state: await hydrateAppStateAuthUsers(state),
@@ -288,49 +310,51 @@ async function saveAppStateInDatabaseNow(
             ? normalizeAppState(currentDocument.data)
             : null
           const databaseServiceTickets = await readServiceTicketsFromDatabase(tx)
+          const databaseModules = await readDatabaseBackedAppStateModules(tx)
+          const databaseModuleState = applyDatabaseModuleRead(
+            EMPTY_APP_STATE,
+            databaseModules
+          )
           const currentState = currentDocumentState
             ? hydrateServiceTicketsWithDatabaseRows(
-                currentDocumentState,
+                applyDatabaseModuleRead(currentDocumentState, databaseModules),
                 databaseServiceTickets
               )
             : null
           const hasEmbeddedServiceTickets =
             (currentDocumentState?.serviceTickets.length ?? 0) > 0
-          const shouldSyncServiceTickets = !areServiceTicketListsEqual(
-            databaseServiceTickets,
-            incomingStateToSave.serviceTickets
-          )
-
-          if (currentDocument && currentState) {
-            if (
-              !hasPersistentStateChange(currentState, state) &&
-              !shouldSyncServiceTickets &&
-              !hasEmbeddedServiceTickets
-            ) {
-              return {
-                state,
-                revision: Number(currentDocument.revision),
-                hydrateAuthUsers: false,
-              }
-            }
-          }
+          const hasEmbeddedDatabaseBackedModules = currentDocumentState
+            ? hasDatabaseBackedAppStateModuleData(currentDocumentState)
+            : false
 
           const baseState = currentDocument
             ? omitEphemeralAppState(currentState ?? EMPTY_APP_STATE)
             : hydrateServiceTicketsWithDatabaseRows(
-                EMPTY_APP_STATE,
+                applyDatabaseModuleRead(EMPTY_APP_STATE, databaseModules),
                 databaseServiceTickets
               )
           const stateToSave = mergeAppStates(baseState, incomingStateToSave)
-          const documentStateToSave =
+          const shouldSyncServiceTickets = !areServiceTicketListsEqual(
+            databaseServiceTickets,
+            stateToSave.serviceTickets
+          )
+          const shouldSyncDatabaseBackedModules =
+            !areDatabaseBackedAppStateModulesEqual(
+              databaseModuleState,
+              stateToSave
+            )
+          const documentStateToSave = omitDatabaseBackedAppStateModules(
             omitDatabaseBackedServiceTickets(stateToSave)
+          )
 
           if (
             currentDocument &&
             currentState &&
             !hasPersistentStateChange(currentState, stateToSave) &&
             !shouldSyncServiceTickets &&
-            !hasEmbeddedServiceTickets
+            !hasEmbeddedServiceTickets &&
+            !shouldSyncDatabaseBackedModules &&
+            !hasEmbeddedDatabaseBackedModules
           ) {
             return {
               state,
@@ -373,6 +397,13 @@ async function saveAppStateInDatabaseNow(
             await syncServiceTicketsToDatabase(tx, stateToSave.serviceTickets)
           }
 
+          if (
+            shouldSyncDatabaseBackedModules ||
+            hasEmbeddedDatabaseBackedModules
+          ) {
+            await syncDatabaseBackedAppStateModules(tx, stateToSave)
+          }
+
           await tx.realtimeEvent.create({
             data: {
               clientId,
@@ -406,6 +437,32 @@ async function saveAppStateInDatabaseNow(
   }
 
   throw new Error("Não foi possível iniciar a transação para salvar o estado.")
+}
+
+async function migrateEmbeddedDatabaseBackedModules(state: AppState) {
+  await prisma.$transaction(async (tx) => {
+    const document = await tx.appStateDocument.findUnique({
+      where: { key: STATE_KEY },
+    })
+
+    if (!document) return
+
+    const documentState = normalizeAppState(document.data)
+
+    if (!hasDatabaseBackedAppStateModuleData(documentState)) return
+
+    await syncDatabaseBackedAppStateModules(tx, state)
+    await tx.appStateDocument.update({
+      where: { key: STATE_KEY },
+      data: {
+        data: toJsonValue(
+          omitDatabaseBackedAppStateModules(
+            omitDatabaseBackedServiceTickets(state)
+          )
+        ),
+      },
+    })
+  })
 }
 
 export async function readRealtimeEvents(afterId: number) {

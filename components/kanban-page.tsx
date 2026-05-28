@@ -46,6 +46,7 @@ import {
   getUploadSizeLimitMessage,
   splitFilesByUploadSize,
 } from "@/lib/upload-limits";
+import { uploadFileAttachment } from "@/lib/upload-client";
 import {
   CalendarDays,
   Check,
@@ -274,11 +275,22 @@ function getFileExtension(fileName: string) {
   return fileName.split(".").pop()?.toUpperCase() ?? "ARQ";
 }
 
-function getAttachmentKind(file: File): AttachmentKind {
-  if (file.type.startsWith("image/")) return "image";
-  if (file.type.startsWith("video/")) return "video";
+function revokeTemporaryAttachmentUrl(url: string) {
+  if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+}
+
+function toKanbanAttachmentKind(
+  kind: Awaited<ReturnType<typeof uploadFileAttachment>>["kind"],
+): AttachmentKind {
+  if (kind === "image" || kind === "video") return kind;
 
   return "document";
+}
+
+function getClientErrorMessage(error: unknown) {
+  return error instanceof Error
+    ? error.message
+    : "Não foi possível concluir a operação.";
 }
 
 function getChecklistProgress(card: KanbanCard) {
@@ -324,6 +336,7 @@ export function KanbanPage({
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState<LabelColor>("green");
   const [isDueDatePickerOpen, setIsDueDatePickerOpen] = useState(false);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
   const idCounterRef = useRef(0);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const selectedCard = selectedCardId ? cardsById[selectedCardId] : null;
@@ -685,9 +698,12 @@ export function KanbanPage({
     toast.success("Item removido.");
   };
 
-  const handleAttachmentChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleAttachmentChange = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
     if (!selectedCard) return;
 
+    const input = event.currentTarget;
     const files = Array.from(event.target.files ?? []);
     if (files.length === 0) return;
 
@@ -700,30 +716,76 @@ export function KanbanPage({
     }
 
     if (acceptedFiles.length === 0) {
-      event.target.value = "";
+      input.value = "";
       return;
     }
 
-    const attachments = acceptedFiles.map((file) => ({
-      id: createId("attachment"),
-      name: file.name,
-      size: file.size,
-      extension: getFileExtension(file.name),
-      kind: getAttachmentKind(file),
-      url: URL.createObjectURL(file),
-    }));
+    setIsUploadingAttachment(true);
 
-    updateCard(selectedCard.id, {
-      attachments: [...selectedCard.attachments, ...attachments],
-    });
-    toast.success(
-      attachments.length === 1 ? "Anexo adicionado." : "Anexos adicionados.",
-    );
-    event.target.value = "";
+    try {
+      const uploadResults = await Promise.allSettled(
+        acceptedFiles.map((file) => uploadFileAttachment(file)),
+      );
+      const attachments = uploadResults.flatMap((result) =>
+        result.status === "fulfilled"
+          ? [
+              {
+                id: result.value.id,
+                name: result.value.name,
+                size: result.value.size,
+                extension:
+                  result.value.extension || getFileExtension(result.value.name),
+                kind: toKanbanAttachmentKind(result.value.kind),
+                url: result.value.url,
+              } satisfies KanbanAttachment,
+            ]
+          : [],
+      );
+      const rejectedUploads = uploadResults.filter(
+        (result) => result.status === "rejected",
+      );
+
+      if (rejectedUploads.length > 0) {
+        toast.error(
+          rejectedUploads.length === 1
+            ? "Não foi possível enviar 1 anexo."
+            : `Não foi possível enviar ${rejectedUploads.length} anexos.`,
+          {
+            description: getClientErrorMessage(
+              rejectedUploads[0].status === "rejected"
+                ? rejectedUploads[0].reason
+                : undefined,
+            ),
+          },
+        );
+      }
+
+      if (attachments.length > 0) {
+        updateCard(selectedCard.id, {
+          attachments: [...selectedCard.attachments, ...attachments],
+        });
+        toast.success(
+          attachments.length === 1
+            ? "Anexo adicionado."
+            : "Anexos adicionados.",
+        );
+      }
+    } finally {
+      setIsUploadingAttachment(false);
+      input.value = "";
+    }
   };
 
   const removeAttachment = (attachmentId: string) => {
     if (!selectedCard) return;
+
+    const removedAttachment = selectedCard.attachments.find(
+      (attachment) => attachment.id === attachmentId,
+    );
+
+    if (removedAttachment) {
+      revokeTemporaryAttachmentUrl(removedAttachment.url);
+    }
 
     updateCard(selectedCard.id, {
       attachments: selectedCard.attachments.filter(
@@ -1114,16 +1176,18 @@ export function KanbanPage({
                       type="file"
                       multiple
                       className="hidden"
+                      disabled={isUploadingAttachment}
                       onChange={handleAttachmentChange}
                     />
                     <Button
                       type="button"
                       variant="outline"
                       className="w-fit"
+                      disabled={isUploadingAttachment}
                       onClick={() => attachmentInputRef.current?.click()}
                     >
                       <Paperclip className="mr-2 h-4 w-4" />
-                      Adicionar anexo
+                      {isUploadingAttachment ? "Enviando..." : "Adicionar anexo"}
                     </Button>
                     <div className="grid gap-2 sm:grid-cols-2">
                       {selectedCard.attachments.map((attachment) => (

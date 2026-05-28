@@ -75,6 +75,7 @@ import {
   getUploadSizeLimitMessage,
   splitFilesByUploadSize,
 } from "@/lib/upload-limits";
+import { uploadFileAttachment } from "@/lib/upload-client";
 
 interface LoansPageProps {
   currentUser: DirectoryUser;
@@ -155,8 +156,20 @@ function LoanNotificationBadge({ count }: { count: number }) {
   );
 }
 
-function getAttachmentKind(file: File): LoanAttachment["kind"] {
-  return file.type.startsWith("video/") ? "video" : "image";
+function revokeTemporaryAttachmentUrl(url: string) {
+  if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+}
+
+function toLoanAttachmentKind(
+  kind: Awaited<ReturnType<typeof uploadFileAttachment>>["kind"],
+): LoanAttachment["kind"] {
+  return kind === "video" ? "video" : "image";
+}
+
+function getClientErrorMessage(error: unknown) {
+  return error instanceof Error
+    ? error.message
+    : "Não foi possível concluir a operação.";
 }
 
 function AttachmentTile({
@@ -238,6 +251,8 @@ export function LoansPage({
   const [approvalAttachments, setApprovalAttachments] = useState<
     LoanAttachment[]
   >([]);
+  const [isUploadingApprovalAttachment, setIsUploadingApprovalAttachment] =
+    useState(false);
   const [rejectLoan, setRejectLoan] = useState<LoanRequest | null>(null);
   const [postponeLoanId, setPostponeLoanId] = useState<string | null>(null);
   const [postponeDate, setPostponeDate] = useState("");
@@ -377,7 +392,10 @@ export function LoansPage({
     toast.success("Empréstimo solicitado.");
   };
 
-  const handleAttachmentChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleAttachmentChange = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const input = event.currentTarget;
     const files = Array.from(event.target.files ?? []);
     if (files.length === 0) return;
 
@@ -391,7 +409,7 @@ export function LoansPage({
     }
 
     if (filesWithinLimit.length === 0) {
-      event.target.value = "";
+      input.value = "";
       return;
     }
 
@@ -404,17 +422,54 @@ export function LoansPage({
       });
     }
 
-    setApprovalAttachments((currentAttachments) => [
-      ...currentAttachments,
-      ...acceptedFiles.map((file) => ({
-        id: createId("loan-file"),
-        name: file.name,
-        size: file.size,
-        kind: getAttachmentKind(file),
-        url: URL.createObjectURL(file),
-      })),
-    ]);
-    event.target.value = "";
+    setIsUploadingApprovalAttachment(true);
+
+    try {
+      const uploadResults = await Promise.allSettled(
+        acceptedFiles.map((file) => uploadFileAttachment(file)),
+      );
+      const uploadedAttachments = uploadResults.flatMap((result) =>
+        result.status === "fulfilled"
+          ? [
+              {
+                id: result.value.id,
+                name: result.value.name,
+                size: result.value.size,
+                kind: toLoanAttachmentKind(result.value.kind),
+                url: result.value.url,
+              } satisfies LoanAttachment,
+            ]
+          : [],
+      );
+      const rejectedUploads = uploadResults.filter(
+        (result) => result.status === "rejected",
+      );
+
+      if (rejectedUploads.length > 0) {
+        toast.error(
+          rejectedUploads.length === 1
+            ? "Não foi possível enviar 1 anexo."
+            : `Não foi possível enviar ${rejectedUploads.length} anexos.`,
+          {
+            description: getClientErrorMessage(
+              rejectedUploads[0].status === "rejected"
+                ? rejectedUploads[0].reason
+                : undefined,
+            ),
+          },
+        );
+      }
+
+      if (uploadedAttachments.length > 0) {
+        setApprovalAttachments((currentAttachments) => [
+          ...currentAttachments,
+          ...uploadedAttachments,
+        ]);
+      }
+    } finally {
+      setIsUploadingApprovalAttachment(false);
+      input.value = "";
+    }
   };
 
   const removeApprovalAttachment = (attachmentId: string) => {
@@ -423,7 +478,9 @@ export function LoansPage({
         (attachment) => attachment.id === attachmentId,
       );
 
-      if (removedAttachment) URL.revokeObjectURL(removedAttachment.url);
+      if (removedAttachment) {
+        revokeTemporaryAttachmentUrl(removedAttachment.url);
+      }
 
       return currentAttachments.filter(
         (attachment) => attachment.id !== attachmentId,
@@ -439,7 +496,7 @@ export function LoansPage({
 
   const closeApprovalDialog = () => {
     approvalAttachments.forEach((attachment) =>
-      URL.revokeObjectURL(attachment.url),
+      revokeTemporaryAttachmentUrl(attachment.url),
     );
     setApprovalLoanId(null);
     setPatrimonyNumber("");
@@ -448,6 +505,11 @@ export function LoansPage({
 
   const approveLoan = () => {
     if (!approvalLoan) return;
+
+    if (isUploadingApprovalAttachment) {
+      toast.info("Aguarde o envio dos anexos terminar.");
+      return;
+    }
 
     const cleanPatrimonyNumber = patrimonyNumber.trim();
 
@@ -975,11 +1037,14 @@ export function LoansPage({
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={approvalAttachments.length >= MAX_LOAN_ATTACHMENTS}
+                      disabled={
+                        isUploadingApprovalAttachment ||
+                        approvalAttachments.length >= MAX_LOAN_ATTACHMENTS
+                      }
                       onClick={() => fileInputRef.current?.click()}
                     >
                       <Paperclip className="mr-1 h-4 w-4" />
-                      Adicionar
+                      {isUploadingApprovalAttachment ? "Enviando..." : "Adicionar"}
                     </Button>
                   </div>
                   <input
@@ -988,6 +1053,7 @@ export function LoansPage({
                     multiple
                     accept="image/*,video/*"
                     className="hidden"
+                    disabled={isUploadingApprovalAttachment}
                     onChange={handleAttachmentChange}
                   />
                   {approvalAttachments.length === 0 ? (
@@ -1012,7 +1078,11 @@ export function LoansPage({
                 <Button type="button" variant="ghost" onClick={closeApprovalDialog}>
                   Cancelar
                 </Button>
-                <Button type="button" onClick={approveLoan}>
+                <Button
+                  type="button"
+                  disabled={isUploadingApprovalAttachment}
+                  onClick={approveLoan}
+                >
                   <ShieldCheck className="mr-1 h-4 w-4" />
                   Liberar empréstimo
                 </Button>

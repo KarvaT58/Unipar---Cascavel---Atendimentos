@@ -57,6 +57,7 @@ import {
   getUploadSizeLimitMessage,
   splitFilesByUploadSize,
 } from "@/lib/upload-limits";
+import { uploadFileAttachment } from "@/lib/upload-client";
 
 type AudienceMode = "manual" | "all" | Sector;
 type AnnouncementAttachmentKind = "image" | "video" | "document";
@@ -259,11 +260,20 @@ function getFileExtension(fileName: string) {
   return fileName.split(".").pop()?.toUpperCase() ?? "ARQ";
 }
 
-function getAttachmentKind(file: File): AnnouncementAttachmentKind {
-  if (file.type.startsWith("image/")) return "image";
-  if (file.type.startsWith("video/")) return "video";
+function revokeTemporaryAttachmentUrl(url: string) {
+  if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+}
 
-  return "document";
+function toAnnouncementAttachmentKind(
+  kind: Awaited<ReturnType<typeof uploadFileAttachment>>["kind"],
+): AnnouncementAttachmentKind {
+  return kind === "image" || kind === "video" ? kind : "document";
+}
+
+function getClientErrorMessage(error: unknown) {
+  return error instanceof Error
+    ? error.message
+    : "Não foi possível concluir a operação.";
 }
 
 function getCalendarDays(viewDate: Date) {
@@ -547,6 +557,7 @@ export function AnnouncementsEventsPage({
   const [draftAttachments, setDraftAttachments] = useState<
     AnnouncementAttachment[]
   >([]);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
   const [editingOriginalAttachmentIds, setEditingOriginalAttachmentIds] =
     useState<string[]>([]);
 
@@ -734,12 +745,13 @@ export function AnnouncementsEventsPage({
         .filter(
           (attachment) => !editingOriginalAttachmentIds.includes(attachment.id),
         )
-        .forEach((attachment) => URL.revokeObjectURL(attachment.url));
+        .forEach((attachment) => revokeTemporaryAttachmentUrl(attachment.url));
       resetForm();
     }
   };
 
-  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
     const files = Array.from(event.target.files ?? []);
 
     if (files.length === 0) return;
@@ -754,7 +766,7 @@ export function AnnouncementsEventsPage({
     }
 
     if (filesWithinLimit.length === 0) {
-      event.target.value = "";
+      input.value = "";
       return;
     }
 
@@ -764,7 +776,7 @@ export function AnnouncementsEventsPage({
       toast.warning("Limite de anexos atingido.", {
         description: "Cada evento pode ter no máximo 3 anexos.",
       });
-      event.target.value = "";
+      input.value = "";
       return;
     }
 
@@ -776,18 +788,56 @@ export function AnnouncementsEventsPage({
       });
     }
 
-    setDraftAttachments((currentAttachments) => [
-      ...currentAttachments,
-      ...acceptedFiles.map((file, index) => ({
-        id: `attachment-${Date.now()}-${index}-${file.name}`,
-        name: file.name,
-        size: file.size,
-        extension: getFileExtension(file.name),
-        kind: getAttachmentKind(file),
-        url: URL.createObjectURL(file),
-      })),
-    ]);
-    event.target.value = "";
+    setIsUploadingAttachment(true);
+
+    try {
+      const uploadResults = await Promise.allSettled(
+        acceptedFiles.map((file) => uploadFileAttachment(file)),
+      );
+      const uploadedAttachments = uploadResults.flatMap((result) =>
+        result.status === "fulfilled"
+          ? [
+              {
+                id: result.value.id,
+                name: result.value.name,
+                size: result.value.size,
+                extension:
+                  result.value.extension || getFileExtension(result.value.name),
+                kind: toAnnouncementAttachmentKind(result.value.kind),
+                url: result.value.url,
+              } satisfies AnnouncementAttachment,
+            ]
+          : [],
+      );
+      const rejectedUploads = uploadResults.filter(
+        (result) => result.status === "rejected",
+      );
+
+      if (rejectedUploads.length > 0) {
+        toast.error(
+          rejectedUploads.length === 1
+            ? "Não foi possível enviar 1 anexo."
+            : `Não foi possível enviar ${rejectedUploads.length} anexos.`,
+          {
+            description: getClientErrorMessage(
+              rejectedUploads[0].status === "rejected"
+                ? rejectedUploads[0].reason
+                : undefined,
+            ),
+          },
+        );
+      }
+
+      if (uploadedAttachments.length > 0) {
+        setDraftAttachments((currentAttachments) => [
+          ...currentAttachments,
+          ...uploadedAttachments,
+        ]);
+      }
+    } finally {
+      setIsUploadingAttachment(false);
+      input.value = "";
+    }
   };
 
   const removeDraftAttachment = (attachmentId: string) => {
@@ -800,7 +850,7 @@ export function AnnouncementsEventsPage({
         removedAttachment &&
         !editingOriginalAttachmentIds.includes(removedAttachment.id)
       ) {
-        URL.revokeObjectURL(removedAttachment.url);
+        revokeTemporaryAttachmentUrl(removedAttachment.url);
       }
 
       return currentAttachments.filter(
@@ -811,6 +861,11 @@ export function AnnouncementsEventsPage({
 
   const handleCreateEvent = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (isUploadingAttachment) {
+      toast.info("Aguarde o envio dos anexos terminar.");
+      return;
+    }
 
     const title = formValues.title.trim();
     const description = formValues.description.trim();
@@ -1258,12 +1313,13 @@ export function AnnouncementsEventsPage({
                         type="button"
                         variant="outline"
                         disabled={
+                          isUploadingAttachment ||
                           draftAttachments.length >= MAX_EVENT_ATTACHMENTS
                         }
                         onClick={() => fileInputRef.current?.click()}
                       >
                         <Paperclip className="mr-1 h-4 w-4" />
-                        Adicionar
+                        {isUploadingAttachment ? "Enviando..." : "Adicionar"}
                       </Button>
                     </div>
                     <input
@@ -1272,12 +1328,14 @@ export function AnnouncementsEventsPage({
                       multiple
                       accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
                       className="hidden"
+                      disabled={isUploadingAttachment}
                       onChange={handleFileChange}
                     />
                     {draftAttachments.length === 0 ? (
                       <button
                         type="button"
                         className="flex h-24 items-center justify-center rounded-lg border border-dashed bg-muted/35 px-4 text-center text-sm text-muted-foreground transition-colors hover:bg-muted/55"
+                        disabled={isUploadingAttachment}
                         onClick={() => fileInputRef.current?.click()}
                       >
                         Adicione até 3 fotos, vídeos ou documentos.
@@ -1379,7 +1437,7 @@ export function AnnouncementsEventsPage({
                   >
                     Cancelar
                   </Button>
-                  <Button type="submit">
+                  <Button type="submit" disabled={isUploadingAttachment}>
                     {editingEventId ? (
                       <Pencil className="mr-1 h-4 w-4" />
                     ) : (

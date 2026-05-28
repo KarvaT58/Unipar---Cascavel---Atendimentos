@@ -36,24 +36,24 @@ enum TicketStatus {
 }
 
 model User {
-  id           String     @id @default(cuid())
-  name         String
-  email        String     @unique
-  sector       String
-  phone        String?    @unique
-  cpfHash      String     @unique
-  cpfCiphertext String?
-  passwordHash String
+  id                 String     @id @default(cuid())
+  name               String
+  email              String     @unique
+  sector             String
+  phone              String?    @unique
+  cpfHash            String     @unique
+  cpfCiphertext      String?
+  passwordHash       String
   passwordCiphertext String?
-  role         UserRole   @default(USER)
-  status       UserStatus @default(ACTIVE)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  role               UserRole   @default(USER)
+  status             UserStatus @default(ACTIVE)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
 
-  sessions Session[]
-  openedTickets   Ticket[] @relation("TicketOpenedBy")
-  assignedTickets Ticket[] @relation("TicketAssignedTo")
-  resolvedTickets Ticket[] @relation("TicketResolvedBy")
+  sessions        Session[]
+  openedTickets   Ticket[]      @relation("TicketOpenedBy")
+  assignedTickets Ticket[]      @relation("TicketAssignedTo")
+  resolvedTickets Ticket[]      @relation("TicketResolvedBy")
   uploadFiles     UploadFile[]
   presence        UserPresence?
 
@@ -289,12 +289,12 @@ model UploadFile {
 }
 
 model UserPresence {
-  userId              String   @id
-  chatStatus          String   @default("offline")
-  preferredChatStatus String   @default("online") @map("preferred_chat_status")
-  workStatus          String   @default("available")
+  userId              String    @id
+  chatStatus          String    @default("offline")
+  preferredChatStatus String    @default("online") @map("preferred_chat_status")
+  workStatus          String    @default("available")
   lastSeenAt          DateTime?
-  updatedAt           DateTime @updatedAt
+  updatedAt           DateTime  @updatedAt
 
   user    User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   clients UserPresenceClient[]
@@ -314,4 +314,161 @@ model UserPresenceClient {
 
   @@index([userId, isActive, lastSeenAt])
   @@map("user_presence_clients")
+}
+
+model AdminUserStateRecord {
+  recordId  String   @id @map("record_id")
+  userId    String?  @map("user_id")
+  email     String?
+  data      Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([email], map: "admin_user_state_records_email_idx")
+  @@index([userId], map: "admin_user_state_records_user_idx")
+  @@map("admin_user_state_records")
+}
+
+model AccessRequestStateRecord {
+  id        String   @id
+  status    String
+  data      Json     @default("{}")
+  createdAt DateTime @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status, createdAt], map: "access_request_state_records_status_created_idx")
+  @@map("access_request_state_records")
+}
+
+model ChatConversationRecord {
+  recordId       String    @id @map("record_id")
+  scope          String
+  conversationId String    @map("conversation_id")
+  ownerId        String?   @map("owner_id")
+  isArchived     Boolean   @default(false) @map("is_archived")
+  lastMessageAt  DateTime? @map("last_message_at")
+  data           Json      @default("{}")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([scope, isArchived, lastMessageAt], map: "chat_conversations_scope_archived_last_idx")
+  @@index([conversationId], map: "chat_conversations_conversation_idx")
+  @@index([ownerId], map: "chat_conversations_owner_idx")
+  @@map("chat_conversation_records")
+}
+
+model ChatMessageRecord {
+  recordId       String   @id @map("record_id")
+  scope          String
+  conversationId String   @map("conversation_id")
+  messageId      String   @map("message_id")
+  senderId       String?  @map("sender_id")
+  isPriority     Boolean  @default(false) @map("is_priority")
+  timestamp      DateTime
+  data           Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@unique([scope, conversationId, messageId], map: "chat_messages_scope_conversation_message_key")
+  @@index([scope, conversationId, timestamp], map: "chat_messages_scope_conversation_timestamp_idx")
+  @@index([senderId, timestamp], map: "chat_messages_sender_timestamp_idx")
+  @@map("chat_message_records")
+}
+
+model GroupMetadataRecord {
+  groupId   String   @id @map("group_id")
+  data      Json     @default("{}")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("group_metadata_records")
+}
+
+model AnnouncementEventRecord {
+  id             String    @id
+  scheduledAt    DateTime  @map("scheduled_at")
+  eventUpdatedAt DateTime? @map("event_updated_at")
+  data           Json      @default("{}")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([scheduledAt], map: "announcement_event_records_scheduled_idx")
+  @@map("announcement_event_records")
+}
+
+model DeletedAnnouncementEventRecord {
+  id        String   @id
+  deletedAt DateTime @default(now()) @map("deleted_at")
+
+  @@map("deleted_announcement_event_records")
+}
+
+model LoanRequestRecord {
+  id        String   @id
+  status    String
+  createdAt DateTime @map("created_at")
+  updatedAt DateTime @map("updated_at")
+  data      Json     @default("{}")
+
+  @@index([status, createdAt], map: "loan_request_records_status_created_idx")
+  @@index([updatedAt], map: "loan_request_records_updated_idx")
+  @@map("loan_request_records")
+}
+
+model KanbanBoardRecord {
+  userId    String   @id @map("user_id")
+  data      Json     @default("{}")
+  updatedAt DateTime @map("updated_at")
+
+  @@map("kanban_board_records")
+}
+
+model AdminReportRecord {
+  id        String   @id
+  status    String
+  createdAt DateTime @map("created_at")
+  data      Json     @default("{}")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status, createdAt], map: "admin_report_records_status_created_idx")
+  @@map("admin_report_records")
+}
+
+model HelpContentRecord {
+  id        String   @id
+  sortOrder Int      @default(0) @map("sort_order")
+  data      Json     @default("{}")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([sortOrder], map: "help_content_records_sort_idx")
+  @@map("help_content_records")
+}
+
+model ExtensionContentRecord {
+  id        String   @id
+  sortOrder Int      @default(0) @map("sort_order")
+  data      Json     @default("{}")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([sortOrder], map: "extension_content_records_sort_idx")
+  @@map("extension_content_records")
+}
+
+model AppPageStateRecord {
+  recordId  String   @id @map("record_id")
+  pageKey   String   @map("page_key")
+  itemId    String   @map("item_id")
+  updatedAt DateTime @map("updated_at")
+  data      Json     @default("{}")
+
+  @@unique([pageKey, itemId], map: "app_page_state_records_page_item_key")
+  @@index([pageKey, updatedAt], map: "app_page_state_records_page_updated_idx")
+  @@map("app_page_state_records")
+}
+
+model PriorityMessageSeenRecord {
+  userId    String   @id @map("user_id")
+  seenKeys  Json     @default("[]") @map("seen_keys")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("priority_message_seen_records")
 }
