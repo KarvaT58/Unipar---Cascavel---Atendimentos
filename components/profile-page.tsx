@@ -34,7 +34,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -483,7 +482,10 @@ export function ProfilePage() {
                             id="profile-chat-status"
                             className="h-10"
                           >
-                            <SelectValue />
+                            <span className="truncate">
+                              {chatStatusOption?.label ??
+                                getUserChatStatusLabel(profile.chatStatus)}
+                            </span>
                           </SelectTrigger>
                           <SelectContent className="rounded-lg">
                             {USER_CHAT_STATUS_OPTIONS.map((option) => (
@@ -518,7 +520,10 @@ export function ProfilePage() {
                             id="profile-work-status"
                             className="h-10"
                           >
-                            <SelectValue />
+                            <span className="truncate">
+                              {workStatusOption?.label ??
+                                getUserWorkStatusLabel(profile.workStatus)}
+                            </span>
                           </SelectTrigger>
                           <SelectContent className="rounded-lg">
                             {USER_WORK_STATUS_OPTIONS.map((option) => (
