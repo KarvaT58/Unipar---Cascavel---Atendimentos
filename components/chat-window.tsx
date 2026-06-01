@@ -118,6 +118,7 @@ export type ForwardTarget = {
 const MESSAGE_PAGE_SIZE = 40;
 const MESSAGE_TEXT_CHUNK_SIZE = 1000;
 const MESSAGE_INPUT_MAX_ROWS = 5;
+const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
 const LONG_PRESS_DURATION_MS = 1000;
 const AUDIO_PROGRESS_THUMB_SIZE = 12;
 const AUDIO_PROGRESS_THUMB_HALF_SIZE = AUDIO_PROGRESS_THUMB_SIZE / 2;
@@ -366,6 +367,21 @@ function getClientErrorMessage(error: unknown) {
   return error instanceof Error
     ? error.message
     : "Não foi possível concluir a operação.";
+}
+
+function getMessageTimestampTime(message: Message) {
+  const timestamp =
+    message.timestamp instanceof Date
+      ? message.timestamp
+      : new Date(message.timestamp);
+
+  return Number.isFinite(timestamp.getTime()) ? timestamp.getTime() : 0;
+}
+
+function isMessageWithinEditWindow(message: Message) {
+  const timestampTime = getMessageTimestampTime(message);
+
+  return timestampTime > 0 && Date.now() - timestampTime <= MESSAGE_EDIT_WINDOW_MS;
 }
 
 function getAudioFileExtension(mimeType: string) {
@@ -1157,6 +1173,12 @@ export function ChatWindow({
 
     return message.isOwn;
   };
+
+  const canEditMessage = (message: Message) =>
+    isMessageOwn(message) &&
+    !message.deletedForEveryone &&
+    message.attachment?.type !== "audio" &&
+    isMessageWithinEditWindow(message);
 
   const getMessageSenderName = (message: Message) => {
     if (isMessageOwn(message)) return CURRENT_USER_MESSAGE_NAME;
@@ -2217,6 +2239,13 @@ export function ChatWindow({
       return;
     }
 
+    if (!isMessageWithinEditWindow(message)) {
+      toast.warning(
+        "O prazo de 15 minutos para editar esta mensagem expirou.",
+      );
+      return;
+    }
+
     setEditingMessage(message);
     setEditValue(message.content);
   };
@@ -2230,6 +2259,18 @@ export function ChatWindow({
 
   const handleSaveEditedMessage = () => {
     if (!editingMessage || !editValue.trim()) return;
+
+    const currentMessage =
+      messages.find((message) => message.id === editingMessage.id) ??
+      editingMessage;
+
+    if (!canEditMessage(currentMessage)) {
+      toast.warning(
+        "O prazo de 15 minutos para editar esta mensagem expirou.",
+      );
+      handleEditDialogOpenChange(false);
+      return;
+    }
 
     const updatedContent = editValue.trim();
 
@@ -2795,10 +2836,17 @@ export function ChatWindow({
             </div>
           </div>
 
+          {editingMessage && !canEditMessage(editingMessage) && (
+            <p className="border-t px-4 py-2 text-xs text-muted-foreground">
+              O prazo de 15 minutos para editar esta mensagem expirou.
+            </p>
+          )}
+
           <div className="flex items-end gap-3 border-t bg-card px-4 py-3">
             <Textarea
               autoFocus
               value={editValue}
+              disabled={editingMessage ? !canEditMessage(editingMessage) : true}
               onChange={(event) => setEditValue(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
@@ -2818,7 +2866,10 @@ export function ChatWindow({
               size="icon"
               className="h-12 w-12 shrink-0 rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
               onClick={handleSaveEditedMessage}
-              disabled={!editValue.trim()}
+              disabled={
+                !editValue.trim() ||
+                (editingMessage ? !canEditMessage(editingMessage) : true)
+              }
               aria-label="Salvar edição"
             >
               <Check className="h-6 w-6" />
@@ -3428,18 +3479,16 @@ export function ChatWindow({
                                         );
                                       },
                                     )}
-                                    {ownMessage &&
-                                      !message.deletedForEveryone &&
-                                      message.attachment?.type !== "audio" && (
-                                        <DropdownMenuItem
-                                          onClick={() =>
-                                            handleOpenEditDialog(message)
-                                          }
-                                        >
-                                          <Pencil className="mr-2 h-4 w-4" />
-                                          Editar
-                                        </DropdownMenuItem>
-                                      )}
+                                    {canEditMessage(message) && (
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          handleOpenEditDialog(message)
+                                        }
+                                      >
+                                        <Pencil className="mr-2 h-4 w-4" />
+                                        Editar
+                                      </DropdownMenuItem>
+                                    )}
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem
                                       className="text-destructive focus:text-destructive"
@@ -3474,16 +3523,14 @@ export function ChatWindow({
                                 </ContextMenuItem>
                               );
                             })}
-                            {ownMessage &&
-                              !message.deletedForEveryone &&
-                              message.attachment?.type !== "audio" && (
-                                <ContextMenuItem
-                                  onClick={() => handleOpenEditDialog(message)}
-                                >
-                                  <Pencil className="mr-2 h-4 w-4" />
-                                  Editar
-                                </ContextMenuItem>
-                              )}
+                            {canEditMessage(message) && (
+                              <ContextMenuItem
+                                onClick={() => handleOpenEditDialog(message)}
+                              >
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Editar
+                              </ContextMenuItem>
+                            )}
                             <ContextMenuSeparator />
                           </>
                         )}
