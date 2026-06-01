@@ -12,6 +12,9 @@ import { cn } from '@/lib/utils'
 import { Button, buttonVariants } from '@/components/unipar-ui/button'
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon } from "lucide-react"
 
+const CALENDAR_WHEEL_NAVIGATION_THRESHOLD = 24
+const CALENDAR_WHEEL_NAVIGATION_COOLDOWN_MS = 220
+
 function Calendar({
   className,
   classNames,
@@ -134,13 +137,64 @@ function Calendar({
         ...classNames,
       }}
       components={{
-        Root: ({ className, rootRef, ...props }) => {
+        Root: ({ className, rootRef, onWheel, ...props }) => {
+          const lastWheelNavigationAtRef = React.useRef(0)
+
+          function handleWheel(event: React.WheelEvent<HTMLDivElement>) {
+            onWheel?.(event)
+
+            if (event.defaultPrevented) return
+
+            const dominantDelta =
+              Math.abs(event.deltaX) > Math.abs(event.deltaY)
+                ? event.deltaX
+                : event.deltaY
+
+            if (
+              Math.abs(dominantDelta) <
+              CALENDAR_WHEEL_NAVIGATION_THRESHOLD
+            ) {
+              return
+            }
+
+            event.preventDefault()
+
+            const now = Date.now()
+
+            if (
+              now - lastWheelNavigationAtRef.current <
+              CALENDAR_WHEEL_NAVIGATION_COOLDOWN_MS
+            ) {
+              return
+            }
+
+            const navigationButton = event.currentTarget.querySelector<
+              HTMLButtonElement
+            >(
+              dominantDelta > 0
+                ? ".rdp-button_next"
+                : ".rdp-button_previous"
+            )
+
+            if (
+              !navigationButton ||
+              navigationButton.disabled ||
+              navigationButton.getAttribute("aria-disabled") === "true"
+            ) {
+              return
+            }
+
+            lastWheelNavigationAtRef.current = now
+            navigationButton.click()
+          }
+
           return (
             <div
               data-slot="calendar"
               ref={rootRef}
               className={cn(className)}
               {...props}
+              onWheel={handleWheel}
             />
           )
         },
