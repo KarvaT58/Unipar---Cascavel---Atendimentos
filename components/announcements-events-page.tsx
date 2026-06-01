@@ -7,6 +7,7 @@ import {
   useState,
   type ChangeEvent,
   type FormEvent,
+  type WheelEvent,
 } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/unipar-ui/badge";
@@ -113,6 +114,8 @@ interface AnnouncementsEventsPageProps {
 const WEEK_DAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"];
 const MAX_VISIBLE_EVENTS_PER_DAY = 2;
 const MAX_EVENT_ATTACHMENTS = 3;
+const DATE_PICKER_WHEEL_THRESHOLD = 24;
+const DATE_PICKER_WHEEL_COOLDOWN_MS = 220;
 const TIME_HOURS = Array.from({ length: 24 }, (_, hour) =>
   String(hour).padStart(2, "0"),
 );
@@ -511,6 +514,7 @@ export function AnnouncementsEventsPage({
 }: AnnouncementsEventsPageProps) {
   const today = useMemo(() => new Date(), []);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const datePickerWheelAtRef = useRef(0);
   const recipientOptions = useMemo<RecipientOption[]>(
     () =>
       recipients.map((recipient) => {
@@ -549,6 +553,9 @@ export function AnnouncementsEventsPage({
     time: "08:00",
   }));
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [datePickerMonth, setDatePickerMonth] = useState(
+    () => new Date(today.getFullYear(), today.getMonth(), 1),
+  );
   const [isTimePickerOpen, setIsTimePickerOpen] = useState(false);
   const [audienceMode, setAudienceMode] = useState<AudienceMode>("all");
   const [selectedRecipientIds, setSelectedRecipientIds] =
@@ -588,6 +595,17 @@ export function AnnouncementsEventsPage({
   const selectedFormDate = formValues.date
     ? new Date(`${formValues.date}T00:00:00`)
     : undefined;
+
+  useEffect(() => {
+    if (!isDatePickerOpen) return;
+
+    const referenceDate = selectedFormDate ?? today;
+
+    setDatePickerMonth(
+      new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1),
+    );
+  }, [isDatePickerOpen, selectedFormDate, today]);
+
   const filteredRecipients = useMemo(() => {
     const normalizedSearch = recipientSearch.trim().toLowerCase();
 
@@ -669,6 +687,33 @@ export function AnnouncementsEventsPage({
       currentRecipientIds.includes(recipientId)
         ? currentRecipientIds.filter((currentId) => currentId !== recipientId)
         : [...currentRecipientIds, recipientId],
+    );
+  };
+
+  const handleDatePickerWheel = (event: WheelEvent<HTMLDivElement>) => {
+    const dominantDelta =
+      Math.abs(event.deltaX) > Math.abs(event.deltaY)
+        ? event.deltaX
+        : event.deltaY;
+
+    if (Math.abs(dominantDelta) < DATE_PICKER_WHEEL_THRESHOLD) return;
+
+    event.preventDefault();
+
+    const now = Date.now();
+
+    if (now - datePickerWheelAtRef.current < DATE_PICKER_WHEEL_COOLDOWN_MS) {
+      return;
+    }
+
+    datePickerWheelAtRef.current = now;
+    setDatePickerMonth(
+      (currentMonth) =>
+        new Date(
+          currentMonth.getFullYear(),
+          currentMonth.getMonth() + (dominantDelta > 0 ? 1 : -1),
+          1,
+        ),
     );
   };
 
@@ -1226,9 +1271,15 @@ export function AnnouncementsEventsPage({
                                 : "Selecione a data"}
                             </Button>
                           </PopoverTrigger>
-                          <PopoverContent align="start" className="w-auto p-0">
+                          <PopoverContent
+                            align="start"
+                            className="w-auto p-0"
+                            onWheel={handleDatePickerWheel}
+                          >
                             <Calendar
                               mode="single"
+                              month={datePickerMonth}
+                              onMonthChange={setDatePickerMonth}
                               selected={selectedFormDate}
                               disabled={(date) => isPastDate(date, today)}
                               locale={ptBR}
