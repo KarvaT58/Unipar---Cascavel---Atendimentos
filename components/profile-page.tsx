@@ -11,6 +11,7 @@ import {
   SaveIcon,
   ShieldCheckIcon,
   UserRoundIcon,
+  XIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -80,7 +81,13 @@ const WORK_STATUS_STYLES: Record<UserWorkStatus, string> = {
   vacation: "border-fuchsia-500/35 bg-fuchsia-500/10 text-fuchsia-300",
 }
 
-export function ProfilePage() {
+export function ProfilePage({
+  isFloating = false,
+  onClose,
+}: {
+  isFloating?: boolean
+  onClose?: () => void
+} = {}) {
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const clientIdRef = React.useRef("")
   const latestStateRef = React.useRef<AppState | null>(null)
@@ -257,209 +264,236 @@ export function ProfilePage() {
     )
   }
 
-  return (
-    <section className="flex h-full min-h-0 items-center justify-center overflow-auto bg-background px-3 py-6">
-      <Card className="w-full max-w-[36rem] overflow-hidden border-border/80 bg-background shadow-2xl shadow-black/20">
-        <CardHeader className="border-b px-5 py-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <CardTitle className="text-xl">Perfil</CardTitle>
-                <span
-                  className={cn(
-                    "inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs font-semibold",
-                    hasChanges
-                      ? "border-amber-500/35 bg-amber-500/10 text-amber-300"
-                      : "border-emerald-500/35 bg-emerald-500/10 text-emerald-300",
-                  )}
-                >
-                  {hasChanges ? (
-                    <CircleAlertIcon className="size-3" />
-                  ) : (
-                    <CheckCircle2Icon className="size-3" />
-                  )}
-                  {hasChanges ? "Pendente" : "Sincronizado"}
-                </span>
-              </div>
-              <CardDescription>
-                Ajuste sua foto, presença, trabalho e recado.
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-
-        <CardContent className="p-5">
-          <div className="flex flex-col items-center text-center">
-            <div className="relative">
-              <Avatar className="size-28 border border-border bg-background">
-                {profile.avatar ? (
-                  <AvatarImage src={profile.avatar} alt={profile.name} />
-                ) : null}
-                <AvatarFallback className="text-2xl">
-                  {getInitials(profile.name)}
-                </AvatarFallback>
-              </Avatar>
+  const profileContent = (
+    <Card
+      className={cn(
+        "w-full max-w-[34rem] overflow-hidden border-border/80 bg-background shadow-2xl shadow-black/20",
+        isFloating && "max-h-[calc(100dvh-2rem)]",
+      )}
+    >
+      <CardHeader className="border-b px-5 py-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle
+                id={isFloating ? "profile-menu-title" : undefined}
+                className="text-xl"
+              >
+                Perfil
+              </CardTitle>
               <span
                 className={cn(
-                  "absolute bottom-2 right-1 size-4 rounded-full border-2 border-background",
-                  presenceMeta.dotClassName,
+                  "inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs font-semibold",
+                  hasChanges
+                    ? "border-amber-500/35 bg-amber-500/10 text-amber-300"
+                    : "border-emerald-500/35 bg-emerald-500/10 text-emerald-300",
                 )}
-              />
-            </div>
-
-            <h1 className="mt-4 max-w-full truncate text-xl font-semibold">
-              {profile.name}
-            </h1>
-            <p className="max-w-full truncate text-sm text-muted-foreground">
-              {profile.email}
-            </p>
-
-            <div className="mt-3 flex max-w-full flex-wrap justify-center gap-2">
-              <StatusPill
-                className="border-primary/25 bg-primary/10 text-primary"
-                icon={Building2Icon}
-                label={`${sectorLabel.code} - ${sectorLabel.name}`}
-              />
-              <StatusPill
-                className="border-border bg-muted/35 text-foreground"
-                icon={profile.isAdmin ? ShieldCheckIcon : UserRoundIcon}
-                label={roleLabel}
-              />
-            </div>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleAvatarChange}
-            />
-
-            <div className="mt-5 grid w-full grid-cols-2 gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={isUploadingAvatar}
-                onClick={() => fileInputRef.current?.click()}
               >
-                <CameraIcon />
-                {profile.avatar ? "Alterar foto" : "Enviar foto"}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                disabled={!profile.avatar || isUploadingAvatar}
-                onClick={handleRemoveAvatar}
-              >
-                <ImageOffIcon />
-                Remover
-              </Button>
+                {hasChanges ? (
+                  <CircleAlertIcon className="size-3" />
+                ) : (
+                  <CheckCircle2Icon className="size-3" />
+                )}
+                {hasChanges ? "Pendente" : "Sincronizado"}
+              </span>
             </div>
+            <CardDescription>
+              Ajuste sua foto, presença, trabalho e recado.
+            </CardDescription>
           </div>
 
-          <div className="mt-6 grid gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="profile-chat-status">Status de presença</Label>
-              <Select
-                value={profile.chatStatus}
-                onValueChange={(value) =>
-                  updateProfile({
-                    chatStatus: value as UserChatStatus,
-                  })
-                }
-              >
-                <SelectTrigger id="profile-chat-status" className="h-11">
-                  <span className="truncate">
-                    {chatStatusOption?.label ??
-                      getUserChatStatusLabel(profile.chatStatus)}
-                  </span>
-                </SelectTrigger>
-                <SelectContent className="rounded-lg">
-                  {USER_CHAT_STATUS_OPTIONS.map((option) => (
-                    <SelectItem
-                      key={option.value}
-                      value={option.value}
-                      className="rounded-md"
-                    >
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="profile-work-status">Status de trabalho</Label>
-              <Select
-                value={profile.workStatus}
-                onValueChange={(value) =>
-                  updateProfile({
-                    workStatus: value as UserWorkStatus,
-                  })
-                }
-              >
-                <SelectTrigger
-                  id="profile-work-status"
-                  className={cn("h-11", WORK_STATUS_STYLES[profile.workStatus])}
-                >
-                  <span className="truncate">
-                    {workStatusOption?.label ??
-                      getUserWorkStatusLabel(profile.workStatus)}
-                  </span>
-                </SelectTrigger>
-                <SelectContent className="rounded-lg">
-                  {USER_WORK_STATUS_OPTIONS.map((option) => (
-                    <SelectItem
-                      key={option.value}
-                      value={option.value}
-                      className="rounded-md"
-                    >
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="profile-about">Recado</Label>
-              <Textarea
-                id="profile-about"
-                value={profile.about}
-                maxLength={140}
-                onChange={(event) =>
-                  updateProfile({ about: event.target.value })
-                }
-                placeholder="Ex.: Atendendo demandas do setor"
-                className="min-h-24 resize-none"
-              />
-              <div className="flex items-center justify-end text-xs text-muted-foreground">
-                <span className="tabular-nums">{profile.about.length}/140</span>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-
-        <div className="grid grid-cols-2 gap-2 border-t bg-muted/35 p-4">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!hasChanges || isSaving}
-            onClick={() => savedProfile && setProfile(savedProfile)}
-          >
-            <RotateCcwIcon />
-            Restaurar
-          </Button>
-          <Button
-            type="button"
-            disabled={!hasChanges || isSaving}
-            onClick={handleSave}
-          >
-            {isSaving ? <CheckCircle2Icon /> : <SaveIcon />}
-            {isSaving ? "Salvando" : "Salvar"}
-          </Button>
+          {onClose ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="-mr-2 -mt-2"
+              onClick={onClose}
+              aria-label="Fechar perfil"
+            >
+              <XIcon />
+            </Button>
+          ) : null}
         </div>
-      </Card>
+      </CardHeader>
+
+      <CardContent className="thin-gray-scrollbar max-h-[calc(100dvh-11rem)] overflow-y-auto p-5">
+        <div className="flex flex-col items-center text-center">
+          <div className="relative">
+            <Avatar className="size-28 border border-border bg-background">
+              {profile.avatar ? (
+                <AvatarImage src={profile.avatar} alt={profile.name} />
+              ) : null}
+              <AvatarFallback className="text-2xl">
+                {getInitials(profile.name)}
+              </AvatarFallback>
+            </Avatar>
+            <span
+              className={cn(
+                "absolute bottom-2 right-1 size-4 rounded-full border-2 border-background",
+                presenceMeta.dotClassName,
+              )}
+            />
+          </div>
+
+          <h1 className="mt-4 max-w-full truncate text-xl font-semibold">
+            {profile.name}
+          </h1>
+          <p className="max-w-full truncate text-sm text-muted-foreground">
+            {profile.email}
+          </p>
+
+          <div className="mt-3 flex max-w-full flex-wrap justify-center gap-2">
+            <StatusPill
+              className="border-primary/25 bg-primary/10 text-primary"
+              icon={Building2Icon}
+              label={`${sectorLabel.code} - ${sectorLabel.name}`}
+            />
+            <StatusPill
+              className="border-border bg-muted/35 text-foreground"
+              icon={profile.isAdmin ? ShieldCheckIcon : UserRoundIcon}
+              label={roleLabel}
+            />
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleAvatarChange}
+          />
+
+          <div className="mt-5 grid w-full grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isUploadingAvatar}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <CameraIcon />
+              {profile.avatar ? "Alterar foto" : "Enviar foto"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={!profile.avatar || isUploadingAvatar}
+              onClick={handleRemoveAvatar}
+            >
+              <ImageOffIcon />
+              Remover
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="profile-chat-status">Status de presença</Label>
+            <Select
+              value={profile.chatStatus}
+              onValueChange={(value) =>
+                updateProfile({
+                  chatStatus: value as UserChatStatus,
+                })
+              }
+            >
+              <SelectTrigger id="profile-chat-status" className="h-11">
+                <span className="truncate">
+                  {chatStatusOption?.label ??
+                    getUserChatStatusLabel(profile.chatStatus)}
+                </span>
+              </SelectTrigger>
+              <SelectContent className="rounded-lg">
+                {USER_CHAT_STATUS_OPTIONS.map((option) => (
+                  <SelectItem
+                    key={option.value}
+                    value={option.value}
+                    className="rounded-md"
+                  >
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="profile-work-status">Status de trabalho</Label>
+            <Select
+              value={profile.workStatus}
+              onValueChange={(value) =>
+                updateProfile({
+                  workStatus: value as UserWorkStatus,
+                })
+              }
+            >
+              <SelectTrigger
+                id="profile-work-status"
+                className={cn("h-11", WORK_STATUS_STYLES[profile.workStatus])}
+              >
+                <span className="truncate">
+                  {workStatusOption?.label ??
+                    getUserWorkStatusLabel(profile.workStatus)}
+                </span>
+              </SelectTrigger>
+              <SelectContent className="rounded-lg">
+                {USER_WORK_STATUS_OPTIONS.map((option) => (
+                  <SelectItem
+                    key={option.value}
+                    value={option.value}
+                    className="rounded-md"
+                  >
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="profile-about">Recado</Label>
+            <Textarea
+              id="profile-about"
+              value={profile.about}
+              maxLength={140}
+              onChange={(event) => updateProfile({ about: event.target.value })}
+              placeholder="Ex.: Atendendo demandas do setor"
+              className="min-h-24 resize-none"
+            />
+            <div className="flex items-center justify-end text-xs text-muted-foreground">
+              <span className="tabular-nums">{profile.about.length}/140</span>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+
+      <div className="grid grid-cols-2 gap-2 border-t bg-muted/35 p-4">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!hasChanges || isSaving}
+          onClick={() => savedProfile && setProfile(savedProfile)}
+        >
+          <RotateCcwIcon />
+          Restaurar
+        </Button>
+        <Button
+          type="button"
+          disabled={!hasChanges || isSaving}
+          onClick={handleSave}
+        >
+          {isSaving ? <CheckCircle2Icon /> : <SaveIcon />}
+          {isSaving ? "Salvando" : "Salvar"}
+        </Button>
+      </div>
+    </Card>
+  )
+
+  if (isFloating) return profileContent
+
+  return (
+    <section className="flex h-full min-h-0 items-center justify-center overflow-auto bg-background px-3 py-6">
+      {profileContent}
     </section>
   )
 }

@@ -29,7 +29,6 @@ const routeLabels: Record<string, { title: string; parent?: string }> = {
   "/criacao-usuarios": { title: "Criação de usuários" },
   "/administracao": { title: "Administração" },
   "/fazer-upgrade": { title: "Fazer upgrade" },
-  "/perfil": { title: "Perfil" },
   "/relatorios": { title: "Relatórios" },
   "/notificacoes": { title: "Notificações" },
   "/whatsapp": { title: "WhatsApp" },

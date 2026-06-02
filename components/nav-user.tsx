@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
@@ -31,6 +30,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { ProfilePage } from "@/components/profile-page"
 import { createBackendClientId } from "@/lib/backend-client"
 
 export function NavUser({
@@ -47,6 +47,7 @@ export function NavUser({
   const { isMobile } = useSidebar()
   const router = useRouter()
   const [open, setOpen] = React.useState(false)
+  const [showProfileMenu, setShowProfileMenu] = React.useState(false)
   const [showLogoutConfirmation, setShowLogoutConfirmation] =
     React.useState(false)
   const initials = getInitials(user.name)
@@ -62,6 +63,22 @@ export function NavUser({
 
     return () => window.clearTimeout(focusTimer)
   }, [showLogoutConfirmation])
+
+  React.useEffect(() => {
+    if (!showProfileMenu) {
+      return
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setShowProfileMenu(false)
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [showProfileMenu])
 
   function closeLogoutConfirmation() {
     setShowLogoutConfirmation(false)
@@ -204,8 +221,10 @@ export function NavUser({
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuItem
-                  render={<Link href="/perfil" />}
-                  onClick={() => setOpen(false)}
+                  onClick={() => {
+                    setOpen(false)
+                    setShowProfileMenu(true)
+                  }}
                 >
                   <UserRoundIcon />
                   Perfil
@@ -235,6 +254,30 @@ export function NavUser({
           </DropdownMenu>
         </SidebarMenuItem>
       </SidebarMenu>
+
+      {showProfileMenu && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setShowProfileMenu(false)
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="profile-menu-title"
+            className="w-full max-w-[34rem]"
+          >
+            <ProfilePage
+              isFloating
+              onClose={() => setShowProfileMenu(false)}
+            />
+          </div>
+        </div>
+      )}
 
       {showLogoutConfirmation && (
         <div
