@@ -24,9 +24,11 @@ function Calendar({
   locale,
   formatters,
   components,
+  onWheel,
   ...props
 }: React.ComponentProps<typeof DayPicker> & {
   buttonVariant?: React.ComponentProps<typeof Button>["variant"]
+  onWheel?: React.WheelEventHandler<HTMLDivElement>
 }) {
   const defaultClassNames = getDefaultClassNames()
 
@@ -137,11 +139,15 @@ function Calendar({
         ...classNames,
       }}
       components={{
-        Root: ({ className, rootRef, onWheel, ...props }) => {
+        Root: ({ className, rootRef, onWheel: rootOnWheel, ...props }) => {
           const lastWheelNavigationAtRef = React.useRef(0)
 
           function handleWheel(event: React.WheelEvent<HTMLDivElement>) {
             onWheel?.(event)
+
+            if (event.defaultPrevented) return
+
+            rootOnWheel?.(event)
 
             if (event.defaultPrevented) return
 

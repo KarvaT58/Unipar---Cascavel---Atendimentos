@@ -17,6 +17,7 @@ import { Checkbox } from "@/components/unipar-ui/checkbox";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/unipar-ui/dialog";
@@ -592,17 +593,29 @@ export function AnnouncementsEventsPage({
     ? isPastDate(selectedDate, today)
     : false;
   const todayInputValue = formatInputDate(today);
-  const selectedFormDate = formValues.date
-    ? new Date(`${formValues.date}T00:00:00`)
-    : undefined;
+  const selectedFormDate = useMemo(() => {
+    if (!formValues.date) return undefined;
+
+    const date = new Date(`${formValues.date}T00:00:00`);
+
+    return Number.isNaN(date.getTime()) ? undefined : date;
+  }, [formValues.date]);
 
   useEffect(() => {
     if (!isDatePickerOpen) return;
 
     const referenceDate = selectedFormDate ?? today;
+    const nextMonth = new Date(
+      referenceDate.getFullYear(),
+      referenceDate.getMonth(),
+      1,
+    );
 
-    setDatePickerMonth(
-      new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1),
+    setDatePickerMonth((currentMonth) =>
+      currentMonth.getFullYear() === nextMonth.getFullYear() &&
+      currentMonth.getMonth() === nextMonth.getMonth()
+        ? currentMonth
+        : nextMonth,
     );
   }, [isDatePickerOpen, selectedFormDate, today]);
 
@@ -1186,6 +1199,10 @@ export function AnnouncementsEventsPage({
                   ? "Editar anúncio/evento"
                   : "Novo anúncio/evento"}
               </DialogTitle>
+              <DialogDescription className="sr-only">
+                Preencha os dados do anúncio ou evento, escolha a data, o
+                horário, os destinatários e os anexos.
+              </DialogDescription>
             </DialogHeader>
 
             <form
@@ -1274,12 +1291,12 @@ export function AnnouncementsEventsPage({
                           <PopoverContent
                             align="start"
                             className="w-auto p-0"
-                            onWheel={handleDatePickerWheel}
                           >
                             <Calendar
                               mode="single"
                               month={datePickerMonth}
                               onMonthChange={setDatePickerMonth}
+                              onWheel={handleDatePickerWheel}
                               selected={selectedFormDate}
                               disabled={(date) => isPastDate(date, today)}
                               locale={ptBR}
