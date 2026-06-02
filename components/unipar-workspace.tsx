@@ -109,6 +109,10 @@ import {
   getDisplayChatStatus,
   PRESENCE_HEARTBEAT_MS,
 } from "@/lib/presence";
+import {
+  PRIORITY_MESSAGE_OPEN_REQUEST_STORAGE_KEY,
+  type PriorityMessageOpenRequest,
+} from "@/lib/priority-message-alerts";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -4307,6 +4311,129 @@ export function UniparWorkspace({
     setActiveSidePanel(null);
     setHighlightedMessageId(null);
   };
+
+  useEffect(() => {
+    if (!isAuthenticated || !isBackendReady || !currentAnnouncementUser.id) {
+      return;
+    }
+
+    let openRequest: PriorityMessageOpenRequest | null = null;
+
+    try {
+      const storedRequest = window.sessionStorage.getItem(
+        PRIORITY_MESSAGE_OPEN_REQUEST_STORAGE_KEY,
+      );
+
+      if (storedRequest) {
+        openRequest = JSON.parse(storedRequest) as PriorityMessageOpenRequest;
+      }
+    } catch {
+      window.sessionStorage.removeItem(
+        PRIORITY_MESSAGE_OPEN_REQUEST_STORAGE_KEY,
+      );
+      return;
+    }
+
+    if (!openRequest) return;
+
+    if (
+      openRequest.userId !== currentAnnouncementUser.id ||
+      Date.now() - openRequest.createdAt > 120000
+    ) {
+      window.sessionStorage.removeItem(
+        PRIORITY_MESSAGE_OPEN_REQUEST_STORAGE_KEY,
+      );
+      return;
+    }
+
+    if (openRequest.scope === "chat") {
+      if (activeNav !== "chat") return;
+
+      const directoryUser = directoryUsersById.get(openRequest.conversationId);
+      const contact =
+        displayContacts.find(
+          (currentContact) => currentContact.id === openRequest.conversationId,
+        ) ??
+        contacts.find((currentContact) =>
+          isStoredDirectContactForCurrentUser(
+            currentContact,
+            openRequest.conversationId,
+          ),
+        ) ??
+        archivedContacts.find((currentContact) =>
+          isStoredDirectContactForCurrentUser(
+            currentContact,
+            openRequest.conversationId,
+          ),
+        ) ??
+        (directoryUser
+          ? {
+              id: directoryUser.id,
+              ownerId: currentAnnouncementUser.id,
+              name: directoryUser.name,
+              avatar: directoryUser.avatar,
+              email: directoryUser.email,
+              about: directoryUser.about,
+              lastMessage: "Mensagem prioritária",
+              lastMessageTime: new Date(),
+              unreadCount: 0,
+              isOnline: directoryUser.isOnline,
+              chatStatus: directoryUser.chatStatus,
+              workStatus: directoryUser.workStatus,
+              lastSeenAt: directoryUser.lastSeenAt,
+              isTyping: false,
+              isArchived: false,
+              isMuted: false,
+              isPinned: false,
+            }
+          : null);
+
+      if (!contact) return;
+
+      handleSelectContact(contact);
+      setHighlightedMessageId(openRequest.messageId);
+      window.sessionStorage.removeItem(
+        PRIORITY_MESSAGE_OPEN_REQUEST_STORAGE_KEY,
+      );
+      return;
+    }
+
+    if (activeNav !== "grupos") return;
+
+    const group =
+      displayGroups.find(
+        (currentGroup) => currentGroup.id === openRequest.conversationId,
+      ) ??
+      groups.find(
+        (currentGroup) => currentGroup.id === openRequest.conversationId,
+      ) ??
+      archivedGroups.find(
+        (currentGroup) => currentGroup.id === openRequest.conversationId,
+      );
+
+    if (!group) return;
+
+    handleSelectGroup(group);
+    setHighlightedMessageId(openRequest.messageId);
+    window.sessionStorage.removeItem(
+      PRIORITY_MESSAGE_OPEN_REQUEST_STORAGE_KEY,
+    );
+  }, [
+    activeNav,
+    archivedContacts,
+    archivedGroups,
+    contacts,
+    currentAnnouncementUser.id,
+    directoryUsersById,
+    displayContacts,
+    displayGroups,
+    groups,
+    handleSelectContact,
+    handleSelectGroup,
+    isAuthenticated,
+    isBackendReady,
+    isStoredDirectContactForCurrentUser,
+  ]);
 
   useEffect(() => {
     if (
