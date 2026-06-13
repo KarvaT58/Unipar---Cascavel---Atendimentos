@@ -8,8 +8,6 @@ import {
   ChevronRightIcon,
   HeadsetIcon,
   InboxIcon,
-  LightbulbIcon,
-  SparklesIcon,
   TicketPlusIcon,
   UsersRoundIcon,
 } from "lucide-react"
@@ -151,7 +149,6 @@ export function DashboardContent({
     })
   const [timeRange, setTimeRange] = React.useState<TimeRange>("90d")
   const [practiceIndex, setPracticeIndex] = React.useState(0)
-  const [isPracticePaused, setIsPracticePaused] = React.useState(false)
   const {
     metrics: currentMetrics,
     sectorLabel: currentSectorLabel,
@@ -312,15 +309,13 @@ export function DashboardContent({
   }, [])
 
   React.useEffect(() => {
-    if (isPracticePaused) return
-
     const intervalId = window.setInterval(
       showNextPractice,
       GOOD_PRACTICE_ROTATION_MS
     )
 
     return () => window.clearInterval(intervalId)
-  }, [isPracticePaused, showNextPractice])
+  }, [showNextPractice])
 
   return (
     <section className="flex h-full min-h-0 flex-col gap-5 overflow-auto">
@@ -336,7 +331,7 @@ export function DashboardContent({
         ))}
       </div>
 
-      <Card className="overflow-hidden border-border/80 bg-linear-to-b from-card to-background/80 pt-0">
+      <Card className="flex min-h-[520px] flex-1 flex-col overflow-hidden border-border/80 bg-linear-to-b from-card to-background/80 pt-0">
         <CardHeader className="flex items-start gap-3 border-b px-4 py-4 sm:flex-row sm:items-center">
           <div className="flex min-w-0 flex-1 gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/12 text-primary">
@@ -376,11 +371,11 @@ export function DashboardContent({
             </SelectContent>
           </Select>
         </CardHeader>
-        <CardContent className="px-2 pt-4 sm:px-5 sm:pt-5">
+        <CardContent className="flex min-h-[300px] flex-1 flex-col px-2 pt-4 sm:px-5 sm:pt-5">
           {hasChartValues ? (
             <ChartContainer
               config={chartConfig}
-              className="aspect-auto h-[300px] w-full"
+              className="aspect-auto min-h-[300px] w-full flex-1"
             >
               <RechartsLineChart data={filteredData}>
                 <RechartsCartesianGrid vertical={false} />
@@ -433,89 +428,63 @@ export function DashboardContent({
             </div>
           )}
         </CardContent>
-        <CardFooter className="grid gap-3 border-t bg-muted/20 p-3 sm:p-4 xl:grid-cols-[minmax(0,1fr)_auto]">
-          <div
-            className="relative min-h-32 overflow-hidden rounded-lg border bg-background/80 p-4"
-            onMouseEnter={() => setIsPracticePaused(true)}
-            onMouseLeave={() => setIsPracticePaused(false)}
-            onFocus={() => setIsPracticePaused(true)}
-            onBlur={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget)) {
-                setIsPracticePaused(false)
-              }
-            }}
-          >
+        <CardFooter className="grid items-stretch border-t bg-muted/15 p-0 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="flex min-h-32 min-w-0 items-center gap-4 px-5 py-4 sm:px-6">
             <div
-              aria-hidden="true"
-              className="absolute -right-8 -top-10 size-28 rounded-full bg-primary/8 blur-2xl"
-            />
-            <div className="relative flex h-full items-start gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
-                <LightbulbIcon className="size-5" />
+              key={activePractice.title}
+              className="dashboard-practice-enter min-w-0 flex-1"
+              aria-live="polite"
+            >
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Boas práticas no atendimento
+                </span>
+                <span className="text-xs font-medium text-muted-foreground">
+                  {activePractice.category}
+                </span>
               </div>
-              <div
-                key={activePractice.title}
-                className="dashboard-practice-enter min-w-0 flex-1"
-                aria-live="polite"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-primary">
-                    Boa prática
-                  </span>
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                    {activePractice.category}
-                  </span>
-                </div>
-                <p className="mt-1.5 text-sm font-semibold text-foreground">
-                  {activePractice.title}
-                </p>
-                <p className="mt-1 text-sm leading-5 text-muted-foreground">
-                  {activePractice.description}
-                </p>
-              </div>
-              <div className="flex shrink-0 gap-1">
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label="Boa prática anterior"
-                  onClick={showPreviousPractice}
-                >
-                  <ChevronLeftIcon />
-                </Button>
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label="Próxima boa prática"
-                  onClick={showNextPractice}
-                >
-                  <ChevronRightIcon />
-                </Button>
-              </div>
+              <p className="mt-2 text-sm font-semibold text-foreground">
+                {activePractice.title}
+              </p>
+              <p className="mt-1 max-w-4xl text-sm leading-5 text-muted-foreground">
+                {activePractice.description}
+              </p>
             </div>
-            <div className="absolute inset-x-0 bottom-0 h-0.5 bg-muted">
-              <span
-                key={`${practiceIndex}-${isPracticePaused}`}
-                className={
-                  isPracticePaused
-                    ? "block h-full bg-primary/60"
-                    : "dashboard-practice-progress block h-full bg-primary"
-                }
-              />
+
+            <div className="flex shrink-0 items-center gap-1">
+              <span className="mr-2 hidden text-xs tabular-nums text-muted-foreground sm:inline">
+                {practiceIndex + 1} de {goodPractices.length}
+              </span>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                aria-label="Boa prática anterior"
+                onClick={showPreviousPractice}
+              >
+                <ChevronLeftIcon />
+              </Button>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                aria-label="Próxima boa prática"
+                onClick={showNextPractice}
+              >
+                <ChevronRightIcon />
+              </Button>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 xl:w-72">
-            <PeriodMetric
+          <div className="grid grid-cols-2 border-t lg:border-l lg:border-t-0">
+            <PeriodSummary
               label="Resolvidos no período"
               value={periodSummary.resolved}
-              icon={CheckCircle2Icon}
             />
-            <PeriodMetric
+            <PeriodSummary
               label="Dias com atividade"
               value={periodSummary.activeDays}
-              icon={SparklesIcon}
+              className="border-l"
             />
           </div>
         </CardFooter>
@@ -634,26 +603,23 @@ function buildParticipants(
   ]
 }
 
-function PeriodMetric({
+function PeriodSummary({
   label,
   value,
-  icon: Icon,
+  className,
 }: {
   label: string
   value: number
-  icon: React.ComponentType<{ className?: string }>
+  className?: string
 }) {
   return (
-    <div className="flex min-h-32 flex-col justify-between rounded-lg border bg-background/80 p-4">
-      <div className="flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary">
-        <Icon className="size-4" />
-      </div>
-      <div>
-        <p className="text-2xl font-bold tabular-nums">
-          {value.toLocaleString("pt-BR")}
-        </p>
-        <p className="mt-1 text-xs leading-4 text-muted-foreground">{label}</p>
-      </div>
+    <div
+      className={`flex min-h-32 flex-col justify-center px-5 py-4 ${className ?? ""}`}
+    >
+      <p className="text-3xl font-bold tabular-nums text-foreground">
+        {value.toLocaleString("pt-BR")}
+      </p>
+      <p className="mt-1 text-xs leading-4 text-muted-foreground">{label}</p>
     </div>
   )
 }
