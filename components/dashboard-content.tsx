@@ -4,8 +4,6 @@ import * as React from "react"
 import {
   ArrowUpRightIcon,
   CheckCircle2Icon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   HeadsetIcon,
   InboxIcon,
   TicketPlusIcon,
@@ -26,7 +24,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import {
   ChartContainer,
   ChartLegend,
@@ -276,31 +273,7 @@ export function DashboardContent({
   }, [currentChartParticipants, filteredData])
 
   const hasChartValues = visibleChartParticipants.length > 0
-  const periodSummary = React.useMemo(() => {
-    return filteredData.reduce(
-      (summary, item) => {
-        const dailyTotal = visibleChartParticipants.reduce(
-          (total, participant) =>
-            total + Number(item[participant.key] ?? 0),
-          0
-        )
-
-        return {
-          resolved: summary.resolved + dailyTotal,
-          activeDays: summary.activeDays + (dailyTotal > 0 ? 1 : 0),
-        }
-      },
-      { resolved: 0, activeDays: 0 }
-    )
-  }, [filteredData, visibleChartParticipants])
   const activePractice = goodPractices[practiceIndex]
-
-  const showPreviousPractice = React.useCallback(() => {
-    setPracticeIndex(
-      (currentIndex) =>
-        (currentIndex - 1 + goodPractices.length) % goodPractices.length
-    )
-  }, [])
 
   const showNextPractice = React.useCallback(() => {
     setPracticeIndex(
@@ -428,64 +401,26 @@ export function DashboardContent({
             </div>
           )}
         </CardContent>
-        <CardFooter className="grid items-stretch border-t bg-muted/15 p-0 lg:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="flex min-h-32 min-w-0 items-center gap-4 px-5 py-4 sm:px-6">
-            <div
-              key={activePractice.title}
-              className="dashboard-practice-enter min-w-0 flex-1"
-              aria-live="polite"
-            >
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Boas práticas no atendimento
-                </span>
-                <span className="text-xs font-medium text-muted-foreground">
-                  {activePractice.category}
-                </span>
-              </div>
-              <p className="mt-2 text-sm font-semibold text-foreground">
-                {activePractice.title}
-              </p>
-              <p className="mt-1 max-w-4xl text-sm leading-5 text-muted-foreground">
-                {activePractice.description}
-              </p>
-            </div>
-
-            <div className="flex shrink-0 items-center gap-1">
-              <span className="mr-2 hidden text-xs tabular-nums text-muted-foreground sm:inline">
-                {practiceIndex + 1} de {goodPractices.length}
+        <CardFooter className="border-t bg-muted/15 px-5 py-5 sm:px-6">
+          <div
+            key={activePractice.title}
+            className="dashboard-practice-enter min-w-0"
+            aria-live="polite"
+          >
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Boas práticas no atendimento
               </span>
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="ghost"
-                aria-label="Boa prática anterior"
-                onClick={showPreviousPractice}
-              >
-                <ChevronLeftIcon />
-              </Button>
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="ghost"
-                aria-label="Próxima boa prática"
-                onClick={showNextPractice}
-              >
-                <ChevronRightIcon />
-              </Button>
+              <span className="text-xs font-medium text-muted-foreground">
+                {activePractice.category}
+              </span>
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 border-t lg:border-l lg:border-t-0">
-            <PeriodSummary
-              label="Resolvidos no período"
-              value={periodSummary.resolved}
-            />
-            <PeriodSummary
-              label="Dias com atividade"
-              value={periodSummary.activeDays}
-              className="border-l"
-            />
+            <p className="mt-2 text-sm font-semibold text-foreground">
+              {activePractice.title}
+            </p>
+            <p className="mt-1 max-w-5xl text-sm leading-5 text-muted-foreground">
+              {activePractice.description}
+            </p>
           </div>
         </CardFooter>
       </Card>
@@ -601,27 +536,6 @@ function buildParticipants(
       userId: currentUser.id,
     },
   ]
-}
-
-function PeriodSummary({
-  label,
-  value,
-  className,
-}: {
-  label: string
-  value: number
-  className?: string
-}) {
-  return (
-    <div
-      className={`flex min-h-32 flex-col justify-center px-5 py-4 ${className ?? ""}`}
-    >
-      <p className="text-3xl font-bold tabular-nums text-foreground">
-        {value.toLocaleString("pt-BR")}
-      </p>
-      <p className="mt-1 text-xs leading-4 text-muted-foreground">{label}</p>
-    </div>
-  )
 }
 
 function createResolvedChartData(
