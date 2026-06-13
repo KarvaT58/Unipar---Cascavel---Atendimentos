@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 
 import { AppHeader } from "@/components/app-header"
 import { AppSidebar } from "@/components/app-sidebar"
+import { PageTransition } from "@/components/page-transition"
 import { PresenceTracker } from "@/components/presence-tracker"
 import { PriorityMessageGlobalAlert } from "@/components/priority-message-global-alert"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
@@ -80,9 +81,11 @@ export default async function AppLayout({
         <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-sidebar">
           <AppHeader />
           <div className="relative flex min-h-0 flex-1 flex-col gap-4 overflow-hidden rounded-xl bg-background px-4 pb-6 pt-5">
-            <WorkspaceRouteSlot initialUser={workspaceUser}>
-              {children}
-            </WorkspaceRouteSlot>
+            <PageTransition>
+              <WorkspaceRouteSlot initialUser={workspaceUser}>
+                {children}
+              </WorkspaceRouteSlot>
+            </PageTransition>
           </div>
         </div>
       </SidebarInset>

@@ -4,8 +4,12 @@ import * as React from "react"
 import {
   ArrowUpRightIcon,
   CheckCircle2Icon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   HeadsetIcon,
   InboxIcon,
+  LightbulbIcon,
+  SparklesIcon,
   TicketPlusIcon,
   UsersRoundIcon,
 } from "lucide-react"
@@ -20,9 +24,11 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import {
   ChartContainer,
   ChartLegend,
@@ -77,6 +83,46 @@ type DashboardContentProps = {
 
 const dashboardCurrentUserColor = "#ff0018"
 const DASHBOARD_CHART_DAYS = 90
+const GOOD_PRACTICE_ROTATION_MS = 8_000
+
+const goodPractices = [
+  {
+    category: "Atendimento",
+    title: "Registre o contexto antes de transferir",
+    description:
+      "Inclua o que já foi verificado e o próximo passo esperado. Isso evita retrabalho entre setores.",
+  },
+  {
+    category: "Comunicação",
+    title: "Use mensagens objetivas e completas",
+    description:
+      "Explique o pedido, o impacto e o prazo em uma única mensagem sempre que possível.",
+  },
+  {
+    category: "Prioridade",
+    title: "Reserve a prioridade para o que é realmente urgente",
+    description:
+      "Ao marcar tudo como urgente, os casos críticos perdem destaque e demoram mais para ser percebidos.",
+  },
+  {
+    category: "Organização",
+    title: "Atualize o status durante o atendimento",
+    description:
+      "Um chamado atualizado ajuda toda a equipe a entender o andamento sem precisar interromper o responsável.",
+  },
+  {
+    category: "Segurança",
+    title: "Evite compartilhar dados sensíveis no chat",
+    description:
+      "Use apenas as informações necessárias e confirme o destinatário antes de enviar anexos ou dados pessoais.",
+  },
+  {
+    category: "Colaboração",
+    title: "Finalize com uma orientação clara",
+    description:
+      "Ao concluir, registre a solução aplicada e qualquer cuidado necessário para evitar que o problema retorne.",
+  },
+] as const
 
 const rangeOptions = [
   { value: "90d", label: "Últimos 90 dias", days: 90 },
@@ -104,6 +150,8 @@ export function DashboardContent({
       databaseError,
     })
   const [timeRange, setTimeRange] = React.useState<TimeRange>("90d")
+  const [practiceIndex, setPracticeIndex] = React.useState(0)
+  const [isPracticePaused, setIsPracticePaused] = React.useState(false)
   const {
     metrics: currentMetrics,
     sectorLabel: currentSectorLabel,
@@ -231,6 +279,48 @@ export function DashboardContent({
   }, [currentChartParticipants, filteredData])
 
   const hasChartValues = visibleChartParticipants.length > 0
+  const periodSummary = React.useMemo(() => {
+    return filteredData.reduce(
+      (summary, item) => {
+        const dailyTotal = visibleChartParticipants.reduce(
+          (total, participant) =>
+            total + Number(item[participant.key] ?? 0),
+          0
+        )
+
+        return {
+          resolved: summary.resolved + dailyTotal,
+          activeDays: summary.activeDays + (dailyTotal > 0 ? 1 : 0),
+        }
+      },
+      { resolved: 0, activeDays: 0 }
+    )
+  }, [filteredData, visibleChartParticipants])
+  const activePractice = goodPractices[practiceIndex]
+
+  const showPreviousPractice = React.useCallback(() => {
+    setPracticeIndex(
+      (currentIndex) =>
+        (currentIndex - 1 + goodPractices.length) % goodPractices.length
+    )
+  }, [])
+
+  const showNextPractice = React.useCallback(() => {
+    setPracticeIndex(
+      (currentIndex) => (currentIndex + 1) % goodPractices.length
+    )
+  }, [])
+
+  React.useEffect(() => {
+    if (isPracticePaused) return
+
+    const intervalId = window.setInterval(
+      showNextPractice,
+      GOOD_PRACTICE_ROTATION_MS
+    )
+
+    return () => window.clearInterval(intervalId)
+  }, [isPracticePaused, showNextPractice])
 
   return (
     <section className="flex h-full min-h-0 flex-col gap-5 overflow-auto">
@@ -343,6 +433,92 @@ export function DashboardContent({
             </div>
           )}
         </CardContent>
+        <CardFooter className="grid gap-3 border-t bg-muted/20 p-3 sm:p-4 xl:grid-cols-[minmax(0,1fr)_auto]">
+          <div
+            className="relative min-h-32 overflow-hidden rounded-lg border bg-background/80 p-4"
+            onMouseEnter={() => setIsPracticePaused(true)}
+            onMouseLeave={() => setIsPracticePaused(false)}
+            onFocus={() => setIsPracticePaused(true)}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) {
+                setIsPracticePaused(false)
+              }
+            }}
+          >
+            <div
+              aria-hidden="true"
+              className="absolute -right-8 -top-10 size-28 rounded-full bg-primary/8 blur-2xl"
+            />
+            <div className="relative flex h-full items-start gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
+                <LightbulbIcon className="size-5" />
+              </div>
+              <div
+                key={activePractice.title}
+                className="dashboard-practice-enter min-w-0 flex-1"
+                aria-live="polite"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-primary">
+                    Boa prática
+                  </span>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                    {activePractice.category}
+                  </span>
+                </div>
+                <p className="mt-1.5 text-sm font-semibold text-foreground">
+                  {activePractice.title}
+                </p>
+                <p className="mt-1 text-sm leading-5 text-muted-foreground">
+                  {activePractice.description}
+                </p>
+              </div>
+              <div className="flex shrink-0 gap-1">
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label="Boa prática anterior"
+                  onClick={showPreviousPractice}
+                >
+                  <ChevronLeftIcon />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label="Próxima boa prática"
+                  onClick={showNextPractice}
+                >
+                  <ChevronRightIcon />
+                </Button>
+              </div>
+            </div>
+            <div className="absolute inset-x-0 bottom-0 h-0.5 bg-muted">
+              <span
+                key={`${practiceIndex}-${isPracticePaused}`}
+                className={
+                  isPracticePaused
+                    ? "block h-full bg-primary/60"
+                    : "dashboard-practice-progress block h-full bg-primary"
+                }
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 xl:w-72">
+            <PeriodMetric
+              label="Resolvidos no período"
+              value={periodSummary.resolved}
+              icon={CheckCircle2Icon}
+            />
+            <PeriodMetric
+              label="Dias com atividade"
+              value={periodSummary.activeDays}
+              icon={SparklesIcon}
+            />
+          </div>
+        </CardFooter>
       </Card>
     </section>
   )
@@ -456,6 +632,30 @@ function buildParticipants(
       userId: currentUser.id,
     },
   ]
+}
+
+function PeriodMetric({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string
+  value: number
+  icon: React.ComponentType<{ className?: string }>
+}) {
+  return (
+    <div className="flex min-h-32 flex-col justify-between rounded-lg border bg-background/80 p-4">
+      <div className="flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+        <Icon className="size-4" />
+      </div>
+      <div>
+        <p className="text-2xl font-bold tabular-nums">
+          {value.toLocaleString("pt-BR")}
+        </p>
+        <p className="mt-1 text-xs leading-4 text-muted-foreground">{label}</p>
+      </div>
+    </div>
+  )
 }
 
 function createResolvedChartData(
