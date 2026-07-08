@@ -37,8 +37,9 @@ yarn-error.log*
 .env*
 !.env.example
 
-# LiveKit local/server config (contains API secret)
+# LiveKit local/server config (contains API secret / per-host IP)
 docker/livekit/livekit.yaml
+docker/livekit/.env
 
 # vercel
 .vercel
