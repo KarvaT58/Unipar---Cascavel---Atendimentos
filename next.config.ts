@@ -25,7 +25,7 @@ const nextConfig: NextConfig = {
           {
             key: "Permissions-Policy",
             value:
-              "camera=(), geolocation=(), microphone=(self), payment=(), usb=()",
+              "camera=(self), geolocation=(), microphone=(self), payment=(), usb=()",
           },
           {
             key: "X-Permitted-Cross-Domain-Policies",

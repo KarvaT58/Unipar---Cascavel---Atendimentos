@@ -5,6 +5,7 @@ import {
   useRef,
   useEffect,
   useMemo,
+  useCallback,
   type ChangeEvent,
   type ComponentType,
   type Dispatch,
@@ -57,6 +58,7 @@ import {
   Send,
   Paperclip,
   Mic,
+  MicOff,
   Smile,
   Plus,
   Reply,
@@ -78,10 +80,14 @@ import {
   CheckCheck,
   X,
   Play,
+  Phone,
+  PhoneOff,
   Download,
   ZoomIn,
   ZoomOut,
   PanelTop,
+  Video,
+  VideoOff,
 } from "lucide-react";
 import {
   formatLastSeenAt,
@@ -327,6 +333,15 @@ function EmojiPickerButton({
 }
 
 type PendingAttachmentKind = "image" | "video" | "audio" | "document";
+type ChatCallKind = "audio" | "video";
+type ChatCallStatus = "starting" | "active" | "failed";
+
+interface ActiveChatCall {
+  kind: ChatCallKind;
+  status: ChatCallStatus;
+  startedAt: Date;
+  errorMessage?: string;
+}
 
 interface PendingAttachment {
   id: string;
@@ -361,6 +376,45 @@ function formatRecordingTime(seconds: number) {
   const remainingSeconds = seconds % 60;
 
   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+}
+
+function formatCallDuration(seconds: number) {
+  const safeSeconds = Math.max(0, seconds);
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const remainingSeconds = safeSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, "0")}:${remainingSeconds
+      .toString()
+      .padStart(2, "0")}`;
+  }
+
+  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+}
+
+function stopMediaStream(stream: MediaStream | null) {
+  stream?.getTracks().forEach((track) => track.stop());
+}
+
+function getCallMediaErrorMessage(error: unknown, callKind: ChatCallKind) {
+  const mediaLabel = callKind === "video" ? "camera e microfone" : "microfone";
+
+  if (error instanceof DOMException) {
+    if (error.name === "NotAllowedError") {
+      return `Permita o acesso ao ${mediaLabel} para iniciar a chamada.`;
+    }
+
+    if (error.name === "NotFoundError") {
+      return `Nao encontrei ${mediaLabel} neste dispositivo.`;
+    }
+
+    if (error.name === "NotReadableError") {
+      return `O ${mediaLabel} ja esta em uso por outro aplicativo.`;
+    }
+  }
+
+  return `Nao foi possivel acessar ${mediaLabel}.`;
 }
 
 function getClientErrorMessage(error: unknown) {
@@ -1012,6 +1066,8 @@ interface ChatWindowProps {
   onReportMessage: (message: Message, description: string) => void;
   onClearConversation: () => void;
   onDeleteConversation: () => void;
+  onStartCall?: (kind: ChatCallKind) => void;
+  isCallActionDisabled?: boolean;
   onTypingChange?: (isTyping: boolean) => void;
   onPriorityMessageSent?: (message: Message) => void;
 }
@@ -1039,6 +1095,8 @@ export function ChatWindow({
   onReportMessage,
   onClearConversation,
   onDeleteConversation,
+  onStartCall,
+  isCallActionDisabled = false,
   onTypingChange,
   onPriorityMessageSent,
 }: ChatWindowProps) {
@@ -1085,6 +1143,10 @@ export function ChatWindow({
   const [isCancelRecordingConfirmOpen, setIsCancelRecordingConfirmOpen] =
     useState(false);
   const [isSendingAudioRecording, setIsSendingAudioRecording] = useState(false);
+  const [activeCall, setActiveCall] = useState<ActiveChatCall | null>(null);
+  const [callElapsedSeconds, setCallElapsedSeconds] = useState(0);
+  const [isCallMuted, setIsCallMuted] = useState(false);
+  const [isCallCameraEnabled, setIsCallCameraEnabled] = useState(true);
   const [mediaViewerMessageId, setMediaViewerMessageId] = useState<
     string | null
   >(null);
@@ -1111,8 +1173,12 @@ export function ChatWindow({
   const shouldScrollToBottomRef = useRef(true);
   const isAtLatestMessageRef = useRef(true);
   const latestVisibleMessageKeyRef = useRef<string | null>(null);
+  const previousContactIdRef = useRef(contact.id);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingAudioChunksRef = useRef<Blob[]>([]);
+  const callStreamRef = useRef<MediaStream | null>(null);
+  const callVideoRef = useRef<HTMLVideoElement | null>(null);
+  const callRequestIdRef = useRef(0);
   const isAttachmentComposerOpen = pendingAttachments.length > 0;
   const conversationLabel = isGroup ? "grupo" : "conversa";
   const contactPresenceStatus = getChatPresenceStatus(contact);
@@ -1129,6 +1195,20 @@ export function ChatWindow({
   } • ${groupOnlineParticipants.length} online`;
   const typingText =
     contact.typingText ?? (isGroup ? "digitando..." : "digitando...");
+  const activeCallTitle =
+    activeCall?.kind === "video" ? "Chamada de video" : "Chamada de audio";
+  const activeCallStatusLabel =
+    activeCall?.status === "failed"
+      ? "Falha ao iniciar"
+      : activeCall?.status === "starting"
+        ? "Preparando chamada"
+        : "Chamando";
+  const callActionsDisabled =
+    isAttachmentComposerOpen || Boolean(activeCall) || isCallActionDisabled;
+  const shouldRunCallTimer = Boolean(
+    activeCall && activeCall.status !== "failed",
+  );
+  const activeCallStartedAtTime = activeCall?.startedAt.getTime() ?? 0;
   const visibleMessageCount =
     messagePagination.contactId === contact.id
       ? messagePagination.count
@@ -1168,11 +1248,11 @@ export function ChatWindow({
     );
   }, [forwardQuery, forwardTargets]);
 
-  const isMessageOwn = (message: Message) => {
+  const isMessageOwn = useCallback((message: Message) => {
     if (message.senderId) return message.senderId === currentUser.id;
 
     return message.isOwn;
-  };
+  }, [currentUser.id]);
 
   const canEditMessage = (message: Message) =>
     isMessageOwn(message) &&
@@ -1208,7 +1288,7 @@ export function ChatWindow({
     return contact.avatar;
   };
 
-  const scrollToBottom = (behavior: ScrollBehavior = "auto") => {
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const scrollElement = scrollRef.current;
     if (!scrollElement) return;
 
@@ -1218,17 +1298,157 @@ export function ChatWindow({
     });
     isAtLatestMessageRef.current = true;
     setShowScrollToLatest(false);
-  };
+  }, []);
 
-  const requestScrollToBottom = (behavior: ScrollBehavior = "auto") => {
+  const requestScrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     requestAnimationFrame(() => {
       scrollToBottom(behavior);
       requestAnimationFrame(() => scrollToBottom(behavior));
       window.setTimeout(() => scrollToBottom("auto"), 120);
     });
+  }, [scrollToBottom]);
+
+  const clearCallMedia = () => {
+    if (callVideoRef.current) {
+      callVideoRef.current.srcObject = null;
+    }
+
+    stopMediaStream(callStreamRef.current);
+    callStreamRef.current = null;
+  };
+
+  const handleEndCall = () => {
+    callRequestIdRef.current += 1;
+    clearCallMedia();
+    setActiveCall(null);
+    setCallElapsedSeconds(0);
+    setIsCallMuted(false);
+    setIsCallCameraEnabled(true);
+  };
+
+  const handleStartCall = async (callKind: ChatCallKind) => {
+    if (isGroup) {
+      toast.info("Ligacoes estao disponiveis apenas em conversas individuais.");
+      return;
+    }
+
+    if (activeCall && activeCall.status !== "failed") {
+      toast.info("Finalize a chamada atual antes de iniciar outra.");
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast.error("Seu navegador nao suporta chamadas por aqui.");
+      return;
+    }
+
+    const requestId = callRequestIdRef.current + 1;
+    callRequestIdRef.current = requestId;
+    clearCallMedia();
+    setCallElapsedSeconds(0);
+    setIsCallMuted(false);
+    setIsCallCameraEnabled(callKind === "video");
+    setActiveCall({
+      kind: callKind,
+      status: "starting",
+      startedAt: new Date(),
+    });
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+        video: callKind === "video" ? { facingMode: "user" } : false,
+      });
+
+      if (callRequestIdRef.current !== requestId) {
+        stopMediaStream(stream);
+        return;
+      }
+
+      callStreamRef.current = stream;
+      setActiveCall({
+        kind: callKind,
+        status: "active",
+        startedAt: new Date(),
+      });
+      toast.success(`Ligando para ${contact.name}.`);
+    } catch (error) {
+      if (callRequestIdRef.current !== requestId) return;
+
+      const errorMessage = getCallMediaErrorMessage(error, callKind);
+
+      clearCallMedia();
+      setActiveCall({
+        kind: callKind,
+        status: "failed",
+        startedAt: new Date(),
+        errorMessage,
+      });
+      toast.error(errorMessage);
+    }
+  };
+
+  const handleRetryCall = () => {
+    if (!activeCall) return;
+
+    void handleStartCall(activeCall.kind);
+  };
+
+  const handleCallActionClick = (callKind: ChatCallKind) => {
+    if (onStartCall) {
+      onStartCall(callKind);
+      return;
+    }
+
+    void handleStartCall(callKind);
+  };
+
+  const handleToggleCallMuted = () => {
+    const nextMuted = !isCallMuted;
+
+    callStreamRef.current?.getAudioTracks().forEach((track) => {
+      track.enabled = !nextMuted;
+    });
+    setIsCallMuted(nextMuted);
+  };
+
+  const handleToggleCallCamera = () => {
+    if (activeCall?.kind !== "video") return;
+
+    const nextEnabled = !isCallCameraEnabled;
+
+    callStreamRef.current?.getVideoTracks().forEach((track) => {
+      track.enabled = nextEnabled;
+    });
+    setIsCallCameraEnabled(nextEnabled);
   };
 
   useEffect(() => {
+    const didChangeContact = previousContactIdRef.current !== contact.id;
+    let endCallTimeoutId: number | null = null;
+
+    previousContactIdRef.current = contact.id;
+
+    if (didChangeContact) {
+      callRequestIdRef.current += 1;
+
+      if (callVideoRef.current) {
+        callVideoRef.current.srcObject = null;
+      }
+
+      stopMediaStream(callStreamRef.current);
+      callStreamRef.current = null;
+      endCallTimeoutId = window.setTimeout(() => {
+        setActiveCall(null);
+        setCallElapsedSeconds(0);
+        setIsCallMuted(false);
+        setIsCallCameraEnabled(true);
+      }, 0);
+    }
+
     pendingScrollRestoreRef.current = null;
     shouldScrollToBottomRef.current = true;
     isAtLatestMessageRef.current = true;
@@ -1236,7 +1456,39 @@ export function ChatWindow({
     requestAnimationFrame(() => {
       messageInputRef.current?.focus({ preventScroll: true });
     });
+
+    return () => {
+      if (endCallTimeoutId !== null) {
+        window.clearTimeout(endCallTimeoutId);
+      }
+    };
   }, [contact.id]);
+
+  useEffect(() => {
+    if (!shouldRunCallTimer) return;
+
+    const intervalId = window.setInterval(() => {
+      setCallElapsedSeconds((seconds) => seconds + 1);
+    }, 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, [activeCallStartedAtTime, shouldRunCallTimer]);
+
+  useEffect(() => {
+    const videoElement = callVideoRef.current;
+
+    if (!videoElement || activeCall?.kind !== "video") return;
+
+    videoElement.srcObject = callStreamRef.current;
+
+    if (callStreamRef.current) {
+      void videoElement.play().catch(() => undefined);
+    }
+
+    return () => {
+      videoElement.srcObject = null;
+    };
+  }, [activeCall?.kind, activeCall?.status]);
 
   useEffect(() => {
     isRecordingAudioRef.current = isRecordingAudio;
@@ -1289,6 +1541,7 @@ export function ChatWindow({
       }
 
       recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+      clearCallMedia();
 
       const audioContext = recordingAudioContextRef.current;
       if (audioContext && audioContext.state !== "closed") {
@@ -1348,7 +1601,7 @@ export function ChatWindow({
     }
 
     setShowScrollToLatest(true);
-  }, [contact.id, messagesVisibleToCurrentUser]);
+  }, [contact.id, isMessageOwn, messagesVisibleToCurrentUser]);
 
   useEffect(() => {
     const scrollElement = scrollRef.current;
@@ -1372,7 +1625,7 @@ export function ChatWindow({
       shouldScrollToBottomRef.current = false;
       requestScrollToBottom();
     }
-  }, [messages, visibleMessageCount]);
+  }, [messages, requestScrollToBottom, visibleMessageCount]);
 
   useEffect(() => {
     if (!highlightedMessageId) return;
@@ -2547,6 +2800,34 @@ export function ChatWindow({
         </button>
 
         <div className="ml-auto flex items-center">
+          {!isGroup && (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground"
+                onClick={() => handleCallActionClick("audio")}
+                disabled={callActionsDisabled}
+                aria-disabled={callActionsDisabled}
+                aria-label={`Ligar por audio para ${contact.name}`}
+                title="Ligacao de audio"
+              >
+                <Phone className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground"
+                onClick={() => handleCallActionClick("video")}
+                disabled={callActionsDisabled}
+                aria-disabled={callActionsDisabled}
+                aria-label={`Ligar por video para ${contact.name}`}
+                title="Chamada de video"
+              >
+                <Video className="h-5 w-5" />
+              </Button>
+            </>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -2955,6 +3236,174 @@ export function ChatWindow({
           </div>
         </DialogContent>
       </Dialog>
+
+      {activeCall && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-background/95 p-3 text-foreground backdrop-blur-sm sm:p-4">
+          <div className="flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-lg border bg-card shadow-2xl md:h-[min(44rem,calc(100vh-2rem))]">
+            <div className="flex h-16 shrink-0 items-center justify-between gap-3 border-b bg-background px-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <Avatar className="h-10 w-10 ring-1 ring-border">
+                  <AvatarImage src={contact.avatar} alt={contact.name} />
+                  <AvatarFallback>
+                    {contact.name.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <div className="truncate font-semibold">{contact.name}</div>
+                  <div className="truncate text-sm text-muted-foreground">
+                    {activeCallTitle} • {activeCallStatusLabel}
+                  </div>
+                </div>
+              </div>
+              <div className="shrink-0 text-sm tabular-nums text-muted-foreground">
+                {activeCall.status === "failed"
+                  ? "--:--"
+                  : formatCallDuration(callElapsedSeconds)}
+              </div>
+            </div>
+
+            <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#111312] text-white">
+              {activeCall.kind === "video" &&
+              activeCall.status === "active" &&
+              isCallCameraEnabled ? (
+                <video
+                  ref={callVideoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex flex-col items-center gap-4 px-6 text-center">
+                  <div className="relative">
+                    <Avatar className="h-28 w-28 ring-4 ring-white/10 sm:h-36 sm:w-36">
+                      <AvatarImage src={contact.avatar} alt={contact.name} />
+                      <AvatarFallback className="text-3xl">
+                        {contact.name.slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    {activeCall.status === "starting" && (
+                      <span className="absolute inset-0 animate-ping rounded-full border border-white/30" />
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-xl font-semibold sm:text-2xl">
+                      {contact.name}
+                    </div>
+                    <div className="mt-1 text-sm text-white/70">
+                      {activeCall.status === "failed"
+                        ? activeCall.errorMessage
+                        : activeCall.kind === "video"
+                          ? isCallCameraEnabled
+                            ? "Preparando camera"
+                            : "Camera desligada"
+                          : "Chamando pelo audio"}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeCall.kind === "video" && activeCall.status === "active" && (
+                <div className="absolute bottom-4 right-4 flex items-center gap-2 rounded-md bg-black/55 px-3 py-2 text-xs font-medium text-white shadow-lg">
+                  {isCallCameraEnabled ? (
+                    <Video className="h-4 w-4" />
+                  ) : (
+                    <VideoOff className="h-4 w-4" />
+                  )}
+                  {isCallCameraEnabled ? "Camera ligada" : "Camera desligada"}
+                </div>
+              )}
+            </div>
+
+            <div className="flex shrink-0 items-center justify-center gap-3 border-t bg-[#111312] px-4 py-4 text-white">
+              {activeCall.status === "failed" ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    className="rounded-full bg-white/10 px-5 text-white hover:bg-white/15 hover:text-white"
+                    onClick={handleRetryCall}
+                  >
+                    Tentar novamente
+                  </Button>
+                  <Button
+                    size="icon-lg"
+                    className="h-12 w-12 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={handleEndCall}
+                    aria-label="Fechar chamada"
+                    title="Fechar"
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon-lg"
+                    className={cn(
+                      "h-12 w-12 rounded-full text-white hover:bg-white/15 hover:text-white",
+                      isCallMuted ? "bg-white text-[#111312]" : "bg-white/10",
+                    )}
+                    onClick={handleToggleCallMuted}
+                    aria-label={
+                      isCallMuted ? "Ativar microfone" : "Silenciar microfone"
+                    }
+                    title={
+                      isCallMuted ? "Ativar microfone" : "Silenciar microfone"
+                    }
+                  >
+                    {isCallMuted ? (
+                      <MicOff className="h-5 w-5" />
+                    ) : (
+                      <Mic className="h-5 w-5" />
+                    )}
+                  </Button>
+
+                  {activeCall.kind === "video" && (
+                    <Button
+                      variant="ghost"
+                      size="icon-lg"
+                      className={cn(
+                        "h-12 w-12 rounded-full text-white hover:bg-white/15 hover:text-white",
+                        isCallCameraEnabled
+                          ? "bg-white/10"
+                          : "bg-white text-[#111312]",
+                      )}
+                      onClick={handleToggleCallCamera}
+                      aria-label={
+                        isCallCameraEnabled
+                          ? "Desligar camera"
+                          : "Ligar camera"
+                      }
+                      title={
+                        isCallCameraEnabled
+                          ? "Desligar camera"
+                          : "Ligar camera"
+                      }
+                    >
+                      {isCallCameraEnabled ? (
+                        <Video className="h-5 w-5" />
+                      ) : (
+                        <VideoOff className="h-5 w-5" />
+                      )}
+                    </Button>
+                  )}
+
+                  <Button
+                    size="icon-lg"
+                    className="h-14 w-14 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={handleEndCall}
+                    aria-label="Encerrar chamada"
+                    title="Encerrar chamada"
+                  >
+                    <PhoneOff className="h-6 w-6" />
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {mediaViewerMessage &&
         (mediaViewerAttachment?.type === "image" ||

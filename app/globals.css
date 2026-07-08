@@ -393,55 +393,77 @@
 }
 
 .auth-transition-stage {
+  perspective: 1200px;
+  transform-style: preserve-3d;
   width: 100%;
 }
 
-.auth-form-transition {
+.auth-form-card {
   position: relative;
   isolation: isolate;
-  overflow: visible;
-  border-radius: 24px;
-}
-
-.auth-form-sweep {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklch, var(--border) 78%, transparent);
+  border-radius: 18px;
   background:
     linear-gradient(
-      90deg,
-      transparent 0 30%,
-      color-mix(in oklch, var(--primary) 10%, transparent) 40%,
-      color-mix(in oklch, var(--primary) 34%, transparent) 50%,
-      color-mix(in oklch, var(--primary) 10%, transparent) 60%,
-      transparent 100%
+      145deg,
+      color-mix(in oklch, var(--card) 98%, var(--background)) 0%,
+      color-mix(in oklch, var(--card) 86%, var(--background)) 100%
     );
-  background-position: 120% 0;
-  background-repeat: no-repeat;
-  background-size: 220% 100%;
-  opacity: 0;
-  animation: auth-form-sweep 720ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  box-shadow:
+    0 24px 70px color-mix(in oklch, var(--foreground) 16%, transparent),
+    inset 0 1px 0 color-mix(in oklch, #ffffff 42%, transparent);
+  padding: clamp(1rem, 3vw, 1.5rem);
+  backface-visibility: hidden;
+  transform-origin: center;
+  transform-style: preserve-3d;
+  will-change: opacity, transform;
 }
 
-@keyframes auth-form-sweep {
+.auth-form-card::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklch, var(--primary) 82%, #ffffff),
+    transparent
+  );
+  opacity: 0.72;
+}
+
+.auth-form-card-exit {
+  animation: auth-card-flip-out 220ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.auth-form-card-enter {
+  animation: auth-card-flip-in 340ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes auth-card-flip-out {
   0% {
-    background-position: 120% 0;
-    opacity: 0;
-  }
-
-  18% {
-    opacity: 0.58;
-  }
-
-  64% {
-    opacity: 0.36;
+    opacity: 1;
+    transform: rotateY(0deg) translateZ(0) scale(1);
   }
 
   100% {
-    background-position: -120% 0;
-    opacity: 0;
+    opacity: 0.28;
+    transform: rotateY(-88deg) translateZ(-18px) scale(0.96);
+  }
+}
+
+@keyframes auth-card-flip-in {
+  0% {
+    opacity: 0.28;
+    transform: rotateY(88deg) translateZ(-18px) scale(0.96);
+  }
+
+  100% {
+    opacity: 1;
+    transform: rotateY(0deg) translateZ(0) scale(1);
   }
 }
 
@@ -451,7 +473,8 @@
     animation: none;
   }
 
-  .auth-form-sweep {
+  .auth-form-card-exit,
+  .auth-form-card-enter {
     animation: none;
   }
 }

@@ -5,7 +5,6 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
-import { AuthLegalLinks } from "@/components/auth-legal-links"
 import {
   Combobox,
   ComboboxContent,
@@ -169,13 +168,13 @@ export function SignupForm({
     <form
       noValidate
       onSubmit={handleSubmit}
-      className={cn("flex flex-col gap-6", className)}
+      className={cn("flex flex-col gap-0", className)}
       {...props}
     >
-      <FieldGroup>
+      <FieldGroup className="gap-3">
         <div className="flex flex-col items-center gap-1 text-center">
           <h1 className="text-2xl font-bold">Solicitar seu acesso</h1>
-          <p className="text-sm whitespace-nowrap text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Preencha o formulário para solicitar seu acesso
           </p>
         </div>
@@ -257,36 +256,35 @@ export function SignupForm({
             required
             className="bg-background"
           />
-          <FieldDescription className="whitespace-nowrap">
-            Informe com DDD mas sem o código +55
-          </FieldDescription>
         </Field>
-        <Field>
-          <FieldLabel htmlFor="cpf">CPF</FieldLabel>
-          <Input
-            id="cpf"
-            name="cpf"
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            placeholder="CPF"
-            required
-            className="bg-background"
-          />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="confirm-cpf">Confirmar CPF</FieldLabel>
-          <Input
-            id="confirm-cpf"
-            name="confirmCpf"
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            placeholder="CPF"
-            required
-            className="bg-background"
-          />
-        </Field>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field>
+            <FieldLabel htmlFor="cpf">CPF</FieldLabel>
+            <Input
+              id="cpf"
+              name="cpf"
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="CPF"
+              required
+              className="bg-background"
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="confirm-cpf">Confirmar CPF</FieldLabel>
+            <Input
+              id="confirm-cpf"
+              name="confirmCpf"
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="CPF"
+              required
+              className="bg-background"
+            />
+          </Field>
+        </div>
         <Field orientation="horizontal" className="items-start gap-3">
           <input
             id="accept-terms"
@@ -297,7 +295,7 @@ export function SignupForm({
           />
           <FieldLabel
             htmlFor="accept-terms"
-            className="block whitespace-nowrap text-sm leading-5 text-muted-foreground"
+            className="block text-sm leading-5 text-muted-foreground"
           >
             Aceito{" "}
             <Link
@@ -326,7 +324,6 @@ export function SignupForm({
             Já tem seu acesso? <Link href="/login">Entrar</Link>
           </FieldDescription>
         </Field>
-        <AuthLegalLinks />
       </FieldGroup>
     </form>
   )

@@ -18,6 +18,12 @@ import {
   type AnnouncementEvent,
 } from "@/components/announcements-events-page";
 import { AdminPanel } from "@/components/admin-panel";
+import {
+  ChatCallManager,
+  type ChatCallKind,
+  type ChatCallLogInput,
+  type ChatCallStartRequest,
+} from "@/components/chat-call-manager";
 import { ConversationList } from "@/components/conversation-list";
 import { ChatWindow, type ForwardTarget } from "@/components/chat-window";
 import { ContactDetails } from "@/components/contact-details";
@@ -632,7 +638,9 @@ function getGroupForwardTarget(group: Contact): ForwardTarget {
 const CURRENT_USER_MESSAGE_NAME = "Você";
 
 const HELP_PAGE_SIZE = 8;
-const EXTENSIONS_PAGE_SIZE = 10;
+const EXTENSIONS_MIN_PAGE_SIZE = 10;
+const EXTENSIONS_TABLE_HEADER_HEIGHT = 34;
+const EXTENSIONS_TABLE_ROW_HEIGHT = 45;
 
 const sectionPlaceholders: Record<
   string,
@@ -995,8 +1003,14 @@ function ExtensionsPage({
 }: {
   items: ExtensionContentItem[];
 }) {
+  const tableViewportRef = useRef<HTMLDivElement>(null);
+  const tableHeaderRef = useRef<HTMLDivElement>(null);
+  const tableRowRef = useRef<HTMLDivElement | null>(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [extensionsPageSize, setExtensionsPageSize] = useState(
+    EXTENSIONS_MIN_PAGE_SIZE,
+  );
   const filteredItems = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
 
@@ -1011,13 +1025,72 @@ function ExtensionsPage({
   }, [items, search]);
   const totalPages = Math.max(
     1,
-    Math.ceil(filteredItems.length / EXTENSIONS_PAGE_SIZE),
+    Math.ceil(filteredItems.length / extensionsPageSize),
   );
   const currentPage = Math.min(page, totalPages);
   const paginatedItems = filteredItems.slice(
-    (currentPage - 1) * EXTENSIONS_PAGE_SIZE,
-    currentPage * EXTENSIONS_PAGE_SIZE,
+    (currentPage - 1) * extensionsPageSize,
+    currentPage * extensionsPageSize,
   );
+
+  useEffect(() => {
+    const viewport = tableViewportRef.current;
+
+    if (!viewport) return;
+
+    let frameId = 0;
+    const calculatePageSize = () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+
+      frameId = window.requestAnimationFrame(() => {
+        const viewportStyles = window.getComputedStyle(viewport);
+        const verticalPadding =
+          parseFloat(viewportStyles.paddingTop) +
+          parseFloat(viewportStyles.paddingBottom);
+        const availableHeight = viewport.clientHeight - verticalPadding;
+
+        if (availableHeight <= 0) return;
+
+        const headerHeight =
+          tableHeaderRef.current?.getBoundingClientRect().height ??
+          EXTENSIONS_TABLE_HEADER_HEIGHT;
+        const rowHeight = Math.max(
+          1,
+          tableRowRef.current?.getBoundingClientRect().height ??
+            EXTENSIONS_TABLE_ROW_HEIGHT,
+        );
+        const nextPageSize = Math.max(
+          EXTENSIONS_MIN_PAGE_SIZE,
+          Math.floor((availableHeight - headerHeight) / rowHeight),
+        );
+
+        setExtensionsPageSize((currentPageSize) =>
+          currentPageSize === nextPageSize ? currentPageSize : nextPageSize,
+        );
+      });
+    };
+
+    calculatePageSize();
+    window.addEventListener("resize", calculatePageSize);
+
+    const resizeObserver =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(calculatePageSize);
+
+    resizeObserver?.observe(viewport);
+
+    return () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+
+      window.removeEventListener("resize", calculatePageSize);
+      resizeObserver?.disconnect();
+    };
+  }, [filteredItems.length]);
 
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -1047,7 +1120,10 @@ function ExtensionsPage({
               </div>
             </div>
 
-            <div className="thin-gray-scrollbar min-h-0 flex-1 overflow-auto">
+            <div
+              ref={tableViewportRef}
+              className="thin-gray-scrollbar min-h-0 flex-1 overflow-auto"
+            >
               {filteredItems.length === 0 ? (
                 <div className="flex min-h-64 flex-col items-center justify-center px-4 text-center">
                   <PhoneCall className="h-10 w-10 text-muted-foreground" />
@@ -1061,14 +1137,18 @@ function ExtensionsPage({
                 </div>
               ) : (
                 <div className="min-w-[38rem] lg:min-w-0">
-                  <div className="grid grid-cols-[minmax(12rem,1fr)_minmax(10rem,1fr)_8rem] border-b bg-muted/30 px-3 py-2 text-xs font-semibold uppercase text-muted-foreground lg:grid-cols-[minmax(14rem,1.2fr)_minmax(12rem,1fr)_10rem]">
+                  <div
+                    ref={tableHeaderRef}
+                    className="grid grid-cols-[minmax(12rem,1fr)_minmax(10rem,1fr)_8rem] border-b bg-muted/30 px-3 py-2 text-xs font-semibold uppercase text-muted-foreground lg:grid-cols-[minmax(14rem,1.2fr)_minmax(12rem,1fr)_10rem]"
+                  >
                     <span>Nome</span>
                     <span>Setor</span>
                     <span>Ramal</span>
                   </div>
-                  {paginatedItems.map((item) => (
+                  {paginatedItems.map((item, itemIndex) => (
                     <div
                       key={item.id}
+                      ref={itemIndex === 0 ? tableRowRef : undefined}
                       className="grid grid-cols-[minmax(12rem,1fr)_minmax(10rem,1fr)_8rem] items-center border-b px-3 py-3 text-sm last:border-b-0 lg:grid-cols-[minmax(14rem,1.2fr)_minmax(12rem,1fr)_10rem]"
                     >
                       <span className="truncate font-medium">{item.name}</span>
@@ -1260,6 +1340,8 @@ export function UniparWorkspace({
     useState<PriorityMessageAlert>(null);
   const [priorityMessageCountdown, setPriorityMessageCountdown] = useState(0);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [callStartRequest, setCallStartRequest] =
+    useState<ChatCallStartRequest | null>(null);
   const [activeSidePanel, setActiveSidePanel] = useState<SidePanel>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<
     string | null
@@ -1439,6 +1521,7 @@ export function UniparWorkspace({
     Record<string, TypingIndicatorState>
   >(EMPTY_APP_STATE.typingIndicators);
   const [isBackendReady, setIsBackendReady] = useState(false);
+  const [backendClientId, setBackendClientId] = useState("");
   const typingIndicatorsRef = useRef<Record<string, TypingIndicatorState>>(
     EMPTY_APP_STATE.typingIndicators,
   );
@@ -1838,6 +1921,12 @@ export function UniparWorkspace({
   useEffect(() => {
     let cancelled = false;
     backendClientIdRef.current = createBackendClientId();
+    const clientId = backendClientIdRef.current;
+    const clientIdTimeoutId = window.setTimeout(() => {
+      if (!cancelled) {
+        setBackendClientId(clientId);
+      }
+    }, 0);
 
     fetchBackendState()
       .then((envelope) => {
@@ -1861,6 +1950,7 @@ export function UniparWorkspace({
 
     return () => {
       cancelled = true;
+      window.clearTimeout(clientIdTimeoutId);
     };
   }, [applyBackendState]);
 
@@ -3316,10 +3406,11 @@ export function UniparWorkspace({
 
     return () => window.clearTimeout(timeoutId);
   }, [activePriorityMessageAlert, priorityMessageCountdown]);
-  const buildUpdatedContactSummary = (
-    contact: Contact,
-    updatedMessages: Message[],
-  ) => buildContactSummary(contact, updatedMessages);
+  const buildUpdatedContactSummary = useCallback(
+    (contact: Contact, updatedMessages: Message[]) =>
+      buildContactSummary(contact, updatedMessages),
+    [buildContactSummary],
+  );
 
   const updateGroupDetails = (
     groupId: string,
@@ -3683,6 +3774,166 @@ export function UniparWorkspace({
 
     setConversationConfirmAction({ contact, type, scope });
   };
+
+  const handleStartDirectCall = useCallback(
+    (contact: Contact, kind: ChatCallKind) => {
+      if (!currentAnnouncementUser.id || contact.id === currentAnnouncementUser.id) {
+        return;
+      }
+
+      setCallStartRequest({
+        id: `call-request-${Date.now()}-${contact.id}-${kind}`,
+        contact,
+        kind,
+      });
+    },
+    [currentAnnouncementUser.id],
+  );
+
+  const handleCallStartRequestHandled = useCallback((requestId: string) => {
+    setCallStartRequest((currentRequest) =>
+      currentRequest?.id === requestId ? null : currentRequest,
+    );
+  }, []);
+
+  const handleCallLogMessage = useCallback(
+    (input: ChatCallLogInput) => {
+      const currentUserId = currentAnnouncementUser.id;
+
+      if (!currentUserId) return;
+
+      const remoteUser =
+        input.initiator.id === currentUserId
+          ? input.remoteUser
+          : input.initiator;
+
+      if (!remoteUser.id || remoteUser.id === currentUserId) return;
+
+      const conversationKey = getDirectConversationKey(
+        currentUserId,
+        remoteUser.id,
+      );
+      const existingConversationMessages =
+        messagesByContactRef.current[conversationKey] ?? [];
+
+      if (
+        existingConversationMessages.some((message) => message.id === input.id)
+      ) {
+        return;
+      }
+
+      const message: Message = {
+        id: input.id,
+        content: input.content,
+        timestamp: input.timestamp,
+        isOwn: input.initiator.id === currentUserId,
+        senderId: input.initiator.id,
+        senderName: input.initiator.name,
+        status: "sent",
+      };
+      const nextConversationMessages = [
+        ...existingConversationMessages,
+        message,
+      ].sort((firstMessage, secondMessage) => {
+        const timeDifference =
+          firstMessage.timestamp.getTime() - secondMessage.timestamp.getTime();
+
+        return timeDifference || firstMessage.id.localeCompare(secondMessage.id);
+      });
+      const nextMessagesByContact = {
+        ...messagesByContactRef.current,
+        [conversationKey]: nextConversationMessages,
+      };
+
+      messagesByContactRef.current = nextMessagesByContact;
+      setMessagesByContact(nextMessagesByContact);
+
+      const directoryUser = directoryUsersById.get(remoteUser.id);
+      const existingContact =
+        displayContacts.find((contact) => contact.id === remoteUser.id) ??
+        contacts.find((contact) =>
+          isStoredDirectContactForCurrentUser(contact, remoteUser.id),
+        ) ??
+        archivedContacts.find((contact) =>
+          isStoredDirectContactForCurrentUser(contact, remoteUser.id),
+        );
+      const isArchivedContact = archivedContacts.some((contact) =>
+        isStoredDirectContactForCurrentUser(contact, remoteUser.id),
+      );
+      const shouldCountUnread =
+        !message.isOwn &&
+        !(activeNav === "chat" && selectedContact?.id === remoteUser.id);
+      const fallbackContact: Contact = {
+        ownerId: currentUserId,
+        id: remoteUser.id,
+        name: remoteUser.name || directoryUser?.name || "Contato",
+        avatar: remoteUser.avatar || directoryUser?.avatar || "",
+        email: remoteUser.email || directoryUser?.email || "",
+        about: directoryUser?.about ?? "",
+        lastMessage: input.content,
+        lastMessageTime: input.timestamp,
+        unreadCount: 0,
+        isOnline: directoryUser?.isOnline ?? false,
+        chatStatus: directoryUser?.chatStatus,
+        workStatus: directoryUser?.workStatus,
+        lastSeenAt: directoryUser?.lastSeenAt,
+        isTyping: false,
+        isArchived: false,
+        isMuted: false,
+        isPinned: false,
+      };
+      const contactForSummary = {
+        ...(existingContact ?? fallbackContact),
+        unreadCount: message.isOwn
+          ? 0
+          : (existingContact?.unreadCount ?? 0) + (shouldCountUnread ? 1 : 0),
+      };
+      const displayedMessages = getDisplayedDirectMessagesFromStore(
+        remoteUser.id,
+        nextMessagesByContact,
+      );
+      const summarizedContact = toOwnedDirectContact(
+        buildUpdatedContactSummary(contactForSummary, displayedMessages),
+        {
+          isArchived: isArchivedContact,
+          unreadCount: contactForSummary.unreadCount,
+        },
+      );
+
+      if (isArchivedContact) {
+        setArchivedContacts((currentContacts) =>
+          upsertDirectContactForCurrentUser(currentContacts, summarizedContact),
+        );
+      } else {
+        setContacts((currentContacts) =>
+          upsertDirectContactForCurrentUser(currentContacts, summarizedContact),
+        );
+      }
+
+      setSelectedContact((currentContact) =>
+        currentContact?.id === remoteUser.id
+          ? {
+              ...summarizedContact,
+              unreadCount: 0,
+            }
+          : currentContact,
+      );
+    },
+    [
+      activeNav,
+      archivedContacts,
+      buildUpdatedContactSummary,
+      contacts,
+      currentAnnouncementUser.id,
+      directoryUsersById,
+      displayContacts,
+      getDisplayedDirectMessagesFromStore,
+      isStoredDirectContactForCurrentUser,
+      selectedContact?.id,
+      toOwnedDirectContact,
+      upsertDirectContactForCurrentUser,
+    ],
+  );
 
   const executeClearConversation = (contactId: string) => {
     const contact = findConversationContact(contactId);
@@ -4346,6 +4597,7 @@ export function UniparWorkspace({
       return;
     }
 
+    const timeoutId = window.setTimeout(() => {
     if (openRequest.scope === "chat") {
       if (activeNav !== "chat") return;
 
@@ -4418,6 +4670,10 @@ export function UniparWorkspace({
     window.sessionStorage.removeItem(
       PRIORITY_MESSAGE_OPEN_REQUEST_STORAGE_KEY,
     );
+
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [
     activeNav,
     archivedContacts,
@@ -5764,6 +6020,14 @@ export function UniparWorkspace({
 
   return (
     <div className="flex h-full min-h-0 w-full overflow-hidden bg-background">
+      <ChatCallManager
+        currentUser={currentAnnouncementUser}
+        clientId={backendClientId || "workspace-client"}
+        outgoingRequest={callStartRequest}
+        onOutgoingRequestHandled={handleCallStartRequestHandled}
+        onCallLogMessage={handleCallLogMessage}
+      />
+
       <Dialog
         open={Boolean(reportConversationTarget)}
         onOpenChange={handleReportDialogOpenChange}
@@ -6315,6 +6579,13 @@ export function UniparWorkspace({
                       onDeleteConversation={() =>
                         handleDeleteContact(selectedContact.id)
                       }
+                      onStartCall={(kind) =>
+                        handleStartDirectCall(
+                          selectedDisplayContact ?? selectedContact,
+                          kind,
+                        )
+                      }
+                      isCallActionDisabled={Boolean(callStartRequest)}
                       onTypingChange={(isTyping) =>
                         handleTypingChange("chat", selectedContact.id, isTyping)
                       }

@@ -5,7 +5,6 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
-import { AuthLegalLinks } from "@/components/auth-legal-links"
 import { Button } from "@/components/ui/button"
 import {
   Combobox,
@@ -141,7 +140,7 @@ export function ForgotPasswordForm({
       <FieldGroup>
         <div className="flex flex-col items-center gap-1 text-center">
           <h1 className="text-2xl font-bold">Esqueceu sua senha?</h1>
-          <p className="text-sm whitespace-nowrap text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Preencha os dados para recuperar seu acesso
           </p>
         </div>
@@ -166,7 +165,7 @@ export function ForgotPasswordForm({
             required
             className="bg-background"
           />
-          <FieldDescription className="whitespace-nowrap">
+          <FieldDescription>
             Use apenas seu e-mail institucional @unipar.br
           </FieldDescription>
         </Field>
@@ -236,7 +235,6 @@ export function ForgotPasswordForm({
             Lembrou sua senha? <Link href="/login">Entrar</Link>
           </FieldDescription>
         </Field>
-        <AuthLegalLinks />
       </FieldGroup>
     </form>
   )

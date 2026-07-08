@@ -3,12 +3,15 @@
 import * as React from "react"
 import { usePathname } from "next/navigation"
 
-const EXIT_DURATION = 150
+const FLIP_OUT_DURATION = 220
+const FLIP_IN_DURATION = 340
+
+type FlipPhase = "idle" | "exit" | "enter"
 
 export function AuthFormTransition({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [displayChildren, setDisplayChildren] = React.useState(children)
-  const [sweepKey, setSweepKey] = React.useState(0)
+  const [flipPhase, setFlipPhase] = React.useState<FlipPhase>("idle")
   const previousPathname = React.useRef(pathname)
   const lastAnimatedPathname = React.useRef(pathname)
   const nextChildren = React.useRef(children)
@@ -43,26 +46,25 @@ export function AuthFormTransition({ children }: { children: React.ReactNode }) 
 
     lastAnimatedPathname.current = pathname
     clearTimers()
+    setFlipPhase("exit")
 
     timers.current.push(
       window.setTimeout(() => {
         setDisplayChildren(nextChildren.current)
-        setSweepKey((currentKey) => currentKey + 1)
-      }, EXIT_DURATION)
+        setFlipPhase("enter")
+      }, FLIP_OUT_DURATION)
+    )
+    timers.current.push(
+      window.setTimeout(() => {
+        setFlipPhase("idle")
+      }, FLIP_OUT_DURATION + FLIP_IN_DURATION)
     )
   }, [clearTimers, pathname])
 
   return (
     <div className="auth-transition-stage">
-      <div className="auth-form-transition">
+      <div className={`auth-form-card auth-form-card-${flipPhase}`}>
         {displayChildren}
-        {sweepKey > 0 ? (
-          <span
-            key={sweepKey}
-            aria-hidden="true"
-            className="auth-form-sweep"
-          />
-        ) : null}
       </div>
     </div>
   )

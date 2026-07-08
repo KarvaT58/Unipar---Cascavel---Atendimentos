@@ -1,0 +1,15 @@
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: unipar-livekit
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    ports:
+      - "10.6.10.201:7880:7880"
+      - "10.6.10.201:7881:7881"
+      - "10.6.10.201:40000-40020:40000-40020/udp"
+      - "127.0.0.1:7880:7880"
+      - "127.0.0.1:7881:7881"
+      - "127.0.0.1:40000-40020:40000-40020/udp"

@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
-import { AuthLegalLinks } from "@/components/auth-legal-links"
 import { Button } from "@/components/ui/button"
 import { PasswordInput } from "@/components/password-input"
 import {
@@ -87,7 +86,7 @@ export function LoginForm({
       <FieldGroup>
         <div className="flex flex-col items-center gap-1 text-center">
           <h1 className="text-2xl font-bold">Entrar na sua conta</h1>
-          <p className="text-sm whitespace-nowrap text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Preencha os campos para acessar sua conta
           </p>
         </div>
@@ -126,7 +125,6 @@ export function LoginForm({
             </Link>
           </FieldDescription>
         </Field>
-        <AuthLegalLinks />
       </FieldGroup>
     </form>
   )
